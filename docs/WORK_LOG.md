@@ -1054,3 +1054,28 @@ Updated the integration guide with the verified activation state, worker versus
 candidate status names and health-gate troubleshooting. A successful eligible
 real-candidate assessment, its live deduplication check and unattended scheduling
 remain pending. Preserve the ledger and existing safety policy when resuming.
+
+## 2026-09-22 Publication readiness recovery
+
+The initial push was stopped by the normal pre-push smoke check: system readiness
+was BLOCKED with RED health, a 487-hour-old broker sync and no live price cache.
+After the user requested recovery and publication, created a consistent local
+SQLite backup before running the existing dashboard broker sync. It updated three
+ISA holdings, created and closed none, and returned no account sync errors. No
+broker orders were submitted. Avoided the separate package broker-sync command
+because it can invoke protective-stop workflows.
+
+Refreshed prices through the normal portfolio endpoint and verified three fresh
+T212 cache entries and a current broker-sync timestamp. Readiness became WARNING;
+no runtime code change or hook override was needed for those operational issues.
+A fresh health assessment remained RED with CORE approximately 98% of invested
+entry value against its 80% cap. The earlier 82.74% observation predates the broker
+quantity refresh. Neither the portfolio allocation nor its risk policy was changed
+to manufacture a passing health result.
+
+Inspection also found that the health sleeve calculation uses invested entry value
+while the entry gate uses at least account equity. This policy difference remains
+unresolved and requires a separate decision, not a publication-driven rewrite.
+The Typesafe pilot remains disabled and unscheduled, with real eligible-candidate
+assessment and unattended activation still pending. Updated the integration guide
+to distinguish operational readiness from trading health.

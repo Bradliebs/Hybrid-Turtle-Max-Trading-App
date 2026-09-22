@@ -26,6 +26,14 @@ worker returned `INCOMPLETE_EVIDENCE`, saved five `INSUFFICIENT_EVIDENCE` record
 and sent no additional provider requests. This verifies the exclusion path, not
 a successful real-candidate assessment or model accuracy.
 
+Subsequent operational recovery refreshed broker state through the existing
+dashboard sync and refreshed portfolio prices. Three ISA holdings were updated;
+none were created or closed, and no broker orders were submitted. System readiness
+moved from BLOCKED to WARNING with a current sync timestamp and three fresh cached
+prices. A new health check remained RED: CORE was approximately 98% of invested
+entry value against the 80% cap. That allocation block remains in force; successful
+publication checks do not imply permission to trade or activate the pilot.
+
 The next activation gate is an eligible real-candidate assessment, followed by
 deduplication verification and an explicitly enabled, audited scheduled run.
 Billing, retention and unattended execution remain unverified. Do not repeat
