@@ -130,13 +130,38 @@ describe('checkSleeveLimits', () => {
     expect(result.id).toBe('G1');
   });
 
-  it('returns GREEN for single-sleeve portfolio', () => {
+  it('returns GREEN for a single-sleeve portfolio within its cap of equity', () => {
     const result = checkSleeveLimits([
       makePos({ ticker: 'A', sleeve: 'CORE', entryPrice: 100, shares: 10 }),
       makePos({ ticker: 'B', sleeve: 'CORE', entryPrice: 200, shares: 5 }),
     ], 10000);
     expect(result.status).toBe('GREEN');
-    expect(result.message).toContain('Too few sleeves');
+  });
+
+  it('flags a fully invested single-sleeve portfolio over its cap', () => {
+    const result = checkSleeveLimits([
+      makePos({ ticker: 'A', sleeve: 'CORE', entryPrice: 100, shares: 10 }),
+    ], 900);
+    expect(result.status).toBe('RED');
+    expect(result.message).toContain('CORE: 100% > 80%');
+  });
+
+  it('measures against equity so a cash-heavy account is not a breach', () => {
+    // 98% of invested value is CORE, but invested is only 44% of equity (live 2026-09-22 shape).
+    const result = checkSleeveLimits([
+      makePos({ ticker: 'A', sleeve: 'CORE', entryPrice: 100, shares: 43 }),
+      makePos({ ticker: 'B', sleeve: 'HIGH_RISK', entryPrice: 100, shares: 1 }),
+    ], 10000);
+    expect(result.status).toBe('GREEN');
+  });
+
+  it('uses mark-to-market GBP prices when available', () => {
+    const positions = [
+      makePos({ ticker: 'A', sleeve: 'CORE', entryPrice: 100, shares: 10 }),
+      makePos({ ticker: 'B', sleeve: 'HIGH_RISK', entryPrice: 100, shares: 1 }),
+    ];
+    expect(checkSleeveLimits(positions, 1500).status).toBe('GREEN');
+    expect(checkSleeveLimits(positions, 1500, { A: 150 }, { A: 130 }).status).toBe('RED');
   });
 
   it('returns GREEN when sleeves are within limits', () => {
@@ -153,7 +178,7 @@ describe('checkSleeveLimits', () => {
     const result = checkSleeveLimits([
       makePos({ ticker: 'A', sleeve: 'CORE', entryPrice: 10, shares: 1 }),          // 10
       makePos({ ticker: 'B', sleeve: 'HIGH_RISK', entryPrice: 100, shares: 10 }),   // 1000 = 99%
-    ], 10000);
+    ], 0);
     expect(result.status).toBe('RED');
     expect(result.message).toContain('HIGH_RISK');
   });

@@ -74,13 +74,39 @@ a consistency result as proof that an upstream normalization was correct.
 The pinned SDK is `@typesafe-ai/sdk@0.6.0`, model `jev-1.13.0`, at the fixed HTTPS
 endpoint `https://api.typesafe.ai/v1/systemone`. Redirects and SDK retries are
 disabled. Input and output are validated; payloads over 16 KiB are rejected.
-Review version `candidate-evidence-v1` participates in the payload hash. Bump it
+Review version `candidate-evidence-v2` participates in the payload hash. Bump it
 whenever the question, rubric or evidence contract changes.
 
 Confidence measures the model's answer distribution, not correctness or profit
 probability. A supported claim is not a buy recommendation. Provider retention
 depends on your account agreement; do not assume zero retention.
 See the [Typesafe introduction](https://docs.typesafe.ai/introduction).
+
+## Shadow Picks and Price Calls
+
+Each paid review also asks Jev two shadow questions in the same request, so
+the request budget is unchanged:
+
+* `pick`: TAKE or PASS for a long entry now, with probabilities
+* `move20d`: an expected score from 0 to 4 over five bands for the price 20
+  trading days after the scan (more than 10% down, 3-10% down, within 3%,
+  3-10% up, more than 10% up)
+
+Answers are appended to `data/typesafe-review/shadow-predictions.jsonl`, with
+the scan price, scan identity and input hash. The file is never pruned because
+20-day outcomes arrive after the seven-day ledger retention. No dashboard,
+grade, ranking, sizing, order or stop reads it.
+
+A malformed shadow answer never voids the evidence answer. The review keeps
+its evidence result and records `SHADOW_ANSWER_INVALID` or
+`SHADOW_NOT_RECORDED` in its flags instead.
+
+Jev has no demonstrated forecasting skill and sees only the numbers the
+scanner already computed. Score predictions against `CandidateOutcome`
+(`fwdReturn5d`, `fwdReturn20d`) by scan and ticker, alongside the scanner's
+own ranking, across at least 30 distinct signal days before considering any
+influence on trading. Granting influence is a separate decision requiring
+changes to protected execution code.
 
 ## Local Configuration
 
@@ -171,11 +197,12 @@ safe run statuses and is not automatically rotated.
 `NO_APPROVED_TECHNICAL_CLAIM` can occur even when market evidence is complete.
 Inspect the original grade reason: `BLOCKED_DATA` also represents RED system
 health, not only missing prices. In the September 22 check, the cause was a CORE
-sleeve-limit breach. The current health calculation uses entry price times shares
-as a fraction of total invested entry value, excluding cash and current prices.
-The pilot withholds these portfolio/health explanations rather than sending them
-as technical claims. Resolve or review the underlying policy separately; do not
-change holdings, raise caps or bypass health checks to force an AI assessment.
+sleeve-limit breach measured against invested entry value only. The health check
+now uses the documented risk-gate basis (mark-to-market value over the larger of
+equity and non-HEDGE invested value), and the same portfolio reads about 43%.
+The pilot withholds portfolio/health explanations rather than sending them
+as technical claims. Do not change holdings, raise caps or bypass health checks
+to force an AI assessment.
 
 Locks are never reclaimed automatically based on elapsed time. For a leftover
 lock, disable only the pilot task and stop all manual pilot runs. Confirm the

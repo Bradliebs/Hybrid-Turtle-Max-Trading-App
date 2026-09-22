@@ -115,7 +115,7 @@ export async function runHealthCheck(userId: string): Promise<HealthCheckReport>
   results.push(checkConfigCoherence(user.riskProfile as RiskProfileType));
 
   // ---- G1: Sleeve Limits ----
-  results.push(checkSleeveLimits(user.positions, user.equity));
+  results.push(checkSleeveLimits(user.positions, user.equity, livePrices, gbpPrices));
 
   // ---- G2: Cluster Concentration ----
   results.push(checkClusterConcentration(user.positions, user.equity, user.riskProfile as RiskProfileType));
@@ -622,30 +622,35 @@ export function checkConfigCoherence(riskProfile: RiskProfileType): HealthCheckR
   return { id: 'F', label: 'Config Coherence', category: 'Logic', status: 'GREEN', message: `Config is coherent for ${profile.name} profile` };
 }
 
-export function checkSleeveLimits(positions: HealthCheckPosition[], _equity: number): HealthCheckResult {
+export function checkSleeveLimits(
+  positions: HealthCheckPosition[],
+  equity: number,
+  livePrices?: Record<string, number>,
+  gbpPrices?: Record<string, number>
+): HealthCheckResult {
   if (positions.length === 0) {
     return { id: 'G1', label: 'Sleeve Limits', category: 'Allocation', status: 'GREEN', message: 'No open positions' };
   }
 
-  const totalValue = positions.reduce((sum, p) => sum + (p.entryPrice * p.shares), 0);
-  if (totalValue <= 0) {
-    return { id: 'G1', label: 'Sleeve Limits', category: 'Allocation', status: 'GREEN', message: 'No portfolio value' };
-  }
-
+  // Same basis as risk-gates Gate 3: mark-to-market value over max(equity, non-HEDGE invested).
   const sleeveValues: Record<string, number> = {};
+  let nonHedgeInvested = 0;
   for (const p of positions) {
+    const ticker = p.stock?.ticker;
+    const markPrice = ticker ? (gbpPrices?.[ticker] ?? livePrices?.[ticker] ?? p.entryPrice) : p.entryPrice;
+    const value = markPrice * p.shares;
     const sleeve = p.stock?.sleeve || 'CORE';
-    sleeveValues[sleeve] = (sleeveValues[sleeve] || 0) + (p.entryPrice * p.shares);
+    sleeveValues[sleeve] = (sleeveValues[sleeve] || 0) + value;
+    if (sleeve !== 'HEDGE') nonHedgeInvested += value;
   }
-
-  // With fewer than 2 distinct sleeves, concentration is expected
-  if (Object.keys(sleeveValues).length < 2) {
-    return { id: 'G1', label: 'Sleeve Limits', category: 'Allocation', status: 'GREEN', message: 'Too few sleeves for limit check' };
+  const denominator = Math.max(equity, nonHedgeInvested);
+  if (denominator <= 0) {
+    return { id: 'G1', label: 'Sleeve Limits', category: 'Allocation', status: 'GREEN', message: 'No portfolio value' };
   }
 
   const breaches: string[] = [];
   for (const [sleeve, value] of Object.entries(sleeveValues)) {
-    const pct = value / totalValue;
+    const pct = value / denominator;
     const cap = SLEEVE_CAPS[sleeve as keyof typeof SLEEVE_CAPS] ?? 0.80;
     if (pct > cap) {
       breaches.push(`${sleeve}: ${(pct * 100).toFixed(0)}% > ${(cap * 100).toFixed(0)}%`);

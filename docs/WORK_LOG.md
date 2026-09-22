@@ -1079,3 +1079,38 @@ unresolved and requires a separate decision, not a publication-driven rewrite.
 The Typesafe pilot remains disabled and unscheduled, with real eligible-candidate
 assessment and unattended activation still pending. Updated the integration guide
 to distinguish operational readiness from trading health.
+
+## 2026-09-22 Jev shadow picks and price calls
+
+The user asked for Jev to pick trades and predict prices. The user was
+unavailable to choose a control level, so this implements the repository
+default: shadow mode only. Each paid review now also asks a TAKE/PASS choice
+and a five-band 20-trading-day price score in the same request. Answers go to an
+append-only, never-pruned JSONL file under the ignored pilot directory. Nothing
+in grading, ranking, sizing, orders, stops or the dashboard reads them. The review
+version was bumped to `candidate-evidence-v2` because the payload changed.
+
+Shadow answers are validated separately; a malformed one leaves the evidence
+answer intact and adds a flag. Fifty focused tests, typecheck and lint passed.
+No live request was made for this change, so the real score response shape is
+unverified until the first eligible review. The pilot remains disabled and
+unscheduled. Scoring against `CandidateOutcome` is not yet built and needs
+roughly 30 distinct signal days of recorded predictions.
+
+## 2026-09-22 Health sleeve check aligned with risk-gate rule
+
+With user approval, changed health check G1 (`checkSleeveLimits`) to the basis
+documented in TRADING-LOGIC.md and used by risk-gates Gate 3: mark-to-market GBP
+value over the larger of equity and non-HEDGE invested value. It previously
+divided by invested entry value only, so a 56%-cash account with two CORE holdings
+and one small HIGH_RISK holding read CORE 98% and stayed RED, blocking every
+auto-trade session including buys that would diversify. Under the gate basis CORE
+is about 43% of equity. Removed the single-sleeve exemption, which only existed
+because the old basis always read 100%; a fully invested single-sleeve account
+is now flagged. Caps, risk gates and sacred files are unchanged.
+
+Full suite passed: 162 files, 2,265 tests, two opt-in skips; typecheck clean.
+A fresh saved health check reads YELLOW (position size, cluster and sector
+warnings remain). YELLOW does not block auto-trade, so scheduled sessions can
+resume buying from the next UK session, still subject to every risk gate and the
+two-attempt session cap.
