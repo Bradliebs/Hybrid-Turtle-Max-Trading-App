@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { buildCandidateEvidence, type CandidateEvidence } from '../lib/typesafe-candidate-review';
 import { createTypesafeReviewer, TypesafeReviewError, type TypesafeResponse } from '../lib/typesafe-client';
 import { TypesafeReviewSource, reviewDatabasePath, type ReviewSnapshot } from '../lib/typesafe-review-source';
+import { buildShadowPrediction } from '../lib/typesafe-shadow';
 import { isReviewWeekday, reviewDay, reviewKey, TypesafeReviewStore, type ReviewRecord } from '../lib/typesafe-review-store';
 
 interface ReviewWorkerOptions {
@@ -85,6 +86,15 @@ export async function runTypesafeReview(options: ReviewWorkerOptions): Promise<{
           inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens,
         };
         status = 'COMPLETE';
+        const shadow = buildShadowPrediction(
+          { scanId: snapshot.id, resultId: candidate.resultId, ticker: record.ticker, ownerId: options.ownerId,
+            scanTime: snapshot.scanTime, inputHash: evidence.inputHash! },
+          evidence.state, response.answers, now(),
+        );
+        if (!shadow) record.flags = ['SHADOW_ANSWER_INVALID'];
+        else {
+          try { options.store.appendShadow(shadow); } catch { record.flags = ['SHADOW_NOT_RECORDED']; }
+        }
       } catch (error) {
         record.status = 'UNAVAILABLE';
         record.flags = [error instanceof TypesafeReviewError ? error.code : 'PROVIDER_UNAVAILABLE'];

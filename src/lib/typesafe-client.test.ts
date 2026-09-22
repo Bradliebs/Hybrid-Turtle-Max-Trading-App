@@ -26,6 +26,7 @@ describe('Typesafe transport', () => {
     expect(options?.redirect).toBe('error');
     expect(new Headers(options?.headers).get('authorization')).toBe('Bearer test-key');
     expect(JSON.parse(String(options?.body)).model).toBe(TYPESAFE_MODEL);
+    expect(Object.keys(JSON.parse(String(options?.body)).questions)).toEqual(['evidence', 'pick', 'move20d']);
   });
   it.each([401, 403, 422, 429, 529])('does not retry %s or leak error bodies', async status => {
     const transport = vi.fn<typeof fetch>().mockResolvedValue(new Response('PRIVATE BODY test-key', { status, headers: { 'retry-after': '60' } }));

@@ -1,6 +1,7 @@
 import { choice, TypeSafeClient } from '@typesafe-ai/sdk';
 import { z } from 'zod';
 import { candidateEvidenceSchema, REVIEW_LABELS, reviewLabelSchema, TYPESAFE_MODEL, type CandidateEvidence } from './typesafe-candidate-review';
+import { shadowQuestions } from './typesafe-shadow';
 
 const probability = z.number().finite().min(0).max(1);
 export const typesafeAnswerSchema = z.object({
@@ -15,7 +16,8 @@ export const typesafeAnswerSchema = z.object({
 
 export const typesafeResponseSchema = z.object({
   model: z.literal(TYPESAFE_MODEL),
-  answers: z.object({ evidence: typesafeAnswerSchema }).strict(),
+  // Shadow answers are validated separately so a malformed one cannot void the charged evidence answer.
+  answers: z.object({ evidence: typesafeAnswerSchema, pick: z.unknown().optional(), move20d: z.unknown().optional() }).strict(),
   usage: z.object({ input_tokens: z.number().int().nonnegative(), output_tokens: z.number().int().nonnegative() }).strict(),
 }).strict();
 
@@ -65,6 +67,7 @@ export function createTypesafeReviewer(apiKey: string, transport: typeof fetch =
               INSUFFICIENT_EVIDENCE: 'A needed fact or comparison is absent or ambiguous. Do not guess.',
             },
           ),
+          ...shadowQuestions,
         },
       }, { signal });
       return typesafeResponseSchema.parse(response);

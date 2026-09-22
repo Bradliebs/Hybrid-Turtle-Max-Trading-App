@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { reviewLabelSchema, TYPESAFE_MODEL } from './typesafe-candidate-review';
+import { shadowPredictionSchema, type ShadowPrediction } from './typesafe-shadow';
 
 const answerSchema = z.object({
   choice: reviewLabelSchema,
@@ -47,11 +48,13 @@ export function reviewKey(scanId: string, resultId: string): string {
 export class TypesafeReviewStore {
   private readonly ledgerPath: string;
   private readonly lockPath: string;
+  readonly shadowPath: string;
   private lockToken: string | null = null;
 
   constructor(readonly directory = DEFAULT_REVIEW_DIRECTORY) {
     this.ledgerPath = path.join(directory, 'ledger.json');
     this.lockPath = path.join(directory, 'worker.lock');
+    this.shadowPath = path.join(directory, 'shadow-predictions.jsonl');
   }
 
   acquire(): void {
@@ -100,6 +103,16 @@ export class TypesafeReviewStore {
       fs.fsyncSync(descriptor);
     } finally { fs.closeSync(descriptor); }
     fs.renameSync(temporaryPath, this.ledgerPath);
+  }
+
+  // Never pruned: 20-day outcomes arrive long after the 7-day ledger retention.
+  appendShadow(prediction: ShadowPrediction): void {
+    if (!this.lockToken) throw new Error('REVIEW_LOCK_REQUIRED');
+    const descriptor = fs.openSync(this.shadowPath, 'a');
+    try {
+      fs.writeFileSync(descriptor, `${JSON.stringify(shadowPredictionSchema.parse(prediction))}\n`);
+      fs.fsyncSync(descriptor);
+    } finally { fs.closeSync(descriptor); }
   }
 
   observe(ledger: ReviewLedger, now: Date): void {

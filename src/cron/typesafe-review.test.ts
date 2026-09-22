@@ -14,6 +14,10 @@ const response: TypesafeResponse = { model: TYPESAFE_MODEL,
   answers: { evidence: { type: 'choice', choice: 'SUPPORTED', confidence: 1,
     probabilities: { SUPPORTED: 1, CONTRADICTED: 0, MIXED: 0, INSUFFICIENT_EVIDENCE: 0 } } },
   usage: { input_tokens: 100, output_tokens: 10 } };
+const shadowAnswers = {
+  pick: { type: 'choice', choice: 'TAKE', confidence: 0.6, probabilities: { TAKE: 0.7, PASS: 0.3 } },
+  move20d: { type: 'score', score: 3.1, confidence: 0.4, legend: {}, probabilities: { 0: 0.05, 1: 0.1, 2: 0.2, 3: 0.4, 4: 0.25 } },
+};
 function setup() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'typesafe-worker-'));
   directories.push(directory);
@@ -103,5 +107,19 @@ describe('isolated advisory worker', () => {
     options.evaluate.mockRejectedValueOnce(new Error('unavailable'));
     expect(await runTypesafeReview(options)).toEqual({ status: 'PROVIDER_UNAVAILABLE', failed: true });
     expect(options.evaluate.mock.calls[0][0].price).toBe(99);
+  });
+  it('appends shadow picks and price calls without changing the evidence review', async () => {
+    const options = setup();
+    options.snapshot.candidates = options.snapshot.candidates.slice(0, 2);
+    options.evaluate.mockResolvedValueOnce({ ...response, answers: { ...response.answers, ...shadowAnswers } })
+      .mockResolvedValueOnce({ ...response, answers: { ...response.answers, pick: { type: 'choice', choice: 'BUY' } } });
+    expect(await runTypesafeReview(options)).toEqual({ status: 'COMPLETE', failed: false });
+    const lines = fs.readFileSync(options.store.shadowPath, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ ticker: 'TEST0', scanPrice: 100, pick: { choice: 'TAKE' }, move20d: { score: 3.1 } });
+    const reviews = Object.values(options.store.read().reviews);
+    expect(reviews.every(review => review.status === 'COMPLETE' && review.answer?.choice === 'SUPPORTED')).toBe(true);
+    expect(reviews.find(review => review.ticker === 'TEST1')?.flags).toEqual(['SHADOW_ANSWER_INVALID']);
+    expect(JSON.stringify(reviews)).not.toContain('TAKE');
   });
 });

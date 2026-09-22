@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
 export const TYPESAFE_MODEL = 'jev-1.13.0';
-export const REVIEW_VERSION = 'candidate-evidence-v1';
+export const REVIEW_VERSION = 'candidate-evidence-v2';
 export const REVIEW_LABELS = ['SUPPORTED', 'CONTRADICTED', 'MIXED', 'INSUFFICIENT_EVIDENCE'] as const;
 export const reviewLabelSchema = z.enum(REVIEW_LABELS);
 const measurement = z.number().finite().nullable();
