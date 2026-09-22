@@ -980,3 +980,77 @@ The user authorized committing and pushing the automation repair. Publication
 excludes the unrelated ready-to-buy changes, VRP telemetry, reference PDF and
 private task/database backups. Signed-out execution, wake from sleep and the
 next nightly Telegram delivery remain operational checks, not verified outcomes.
+
+## 2026-09-22 Typesafe candidate-evidence pilot
+
+Implemented the approved advisory-only background pilot after the user selected
+minimal candidate evidence, weekday 15-minute checks, five candidates per scan
+and 20 requests per London day. The feature remains disabled by default; no key
+was inspected, live provider request sent or scheduled task registered.
+
+The pinned Typesafe SDK/model use allowlisted technical claims and market facts,
+strict input/output validation, no retries, redacted errors and fixed-origin
+transport. A read-only SQLite reader selects exact scan-time provenance without
+market/broker imports, future outcomes or mutable score backfills. A separate
+fsynced ledger reserves quota before sending, deduplicates across restarts, caps
+each scan even if its shortlist changes, and fails closed on corrupt accounting,
+write failures, overlaps or clock rollback. Lock recovery is deliberately manual.
+
+Added the one-shot worker, authenticated read-only endpoint and compact scan-page
+advisory section. Existing scan responses/cache now retain optional scan IDs.
+Old caches are still viewable but never matched by ticker alone. Browser results
+are bound to exact scan identity; changed/stale evidence suppresses answers and
+old in-flight responses cannot overwrite a newly selected scan.
+
+Added only the optional pilot's batch launcher, task registrar and read-only audit.
+The task definition uses S4U/limited privileges, IgnoreNew and a five-minute limit;
+it is excluded from mandatory trading-health task manifests. SDK installation
+and runtime SQLite dependency classification changed package metadata only.
+No sacred files, schema, live trading records or existing task definitions were
+edited. Pre-existing ready-to-buy changes, telemetry and reference PDF were left
+untouched. Setup and recovery are in [TYPESAFE-INTEGRATION.md](TYPESAFE-INTEGRATION.md).
+
+Verification: 229 focused tests passed; the full unit suite passed 2,261 tests
+across 162 files with two existing opt-in tests skipped. Typecheck, scoped ESLint
+and editor diagnostics passed. Four Pester 5.7.1 scheduler tests passed with mocked
+registration, including quoted paths and child exit status. The real CLI returned
+DISABLED and the compiled HTTP endpoint returned DISABLED without provider access.
+Browser checks at 1440px and 375px passed for the new section's fit, keyboard
+disclosure and old-response suppression using synthetic fetch responses. Preview
+used a disposable database; initial route-interception misses produced missing
+fixture-table errors, resolved for UI checks by stubbing fetch before page scripts.
+
+Still unverified: live provider quality/key/billing/retention, real-snapshot
+coverage, unattended S4U execution and first scheduled result. Upstream price-unit
+correctness is not independently certified by this pilot. Installation reported
+18 dependency vulnerabilities (3 low, 2 moderate, 9 high, 4 critical); no unrelated
+dependency upgrade was attempted. Activation is a separate local credential and
+operational check, not inferred from passing mocks. No commit or push performed.
+
+## 2026-09-22 Typesafe controlled activation and health diagnosis
+
+After implementation, the user configured the API key locally. Configuration
+checks exposed only presence/validity flags, never the key. Initialized the
+durable ledger and completed one authorized synthetic provider request with a
+validated SUPPORTED response. This establishes authentication, not model quality,
+billing or retention. Manual worker enablement was limited to child processes;
+the saved configuration remains disabled and no pilot task was registered.
+
+Ran the normal guarded dashboard scan using existing stored settings. The HTTP
+client disconnected before completion; the scan continued and its saved snapshot
+was verified before proceeding. No duplicate scan was submitted. The subsequent
+real worker run returned INCOMPLETE_EVIDENCE and saved five exclusions without
+additional paid requests. The ledger retained one total attempt and released its
+lock. No order endpoint was invoked or trading setting changed.
+
+Read-only diagnosis traced every shortlisted BLOCKED_DATA grade to RED system
+health, caused by the CORE sleeve cap. Stored entry-value allocation reproduced
+82.74% against the 80% limit; all open positions used USD. The health check uses
+entry price times shares, not cash-inclusive equity or current market values.
+Seven existing sleeve-limit tests passed. No health records, risk rules, holdings
+or sacred files were changed to obtain a review.
+
+Updated the integration guide with the verified activation state, worker versus
+candidate status names and health-gate troubleshooting. A successful eligible
+real-candidate assessment, its live deduplication check and unattended scheduling
+remain pending. Preserve the ledger and existing safety policy when resuming.

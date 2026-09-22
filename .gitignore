@@ -72,6 +72,8 @@ smoke.log
 auto-trade.log
 midday-sync.log
 research-refresh.log
+typesafe-review.log
+data/typesafe-review/
 rescue-stops.log
 ticker-audit.log
 

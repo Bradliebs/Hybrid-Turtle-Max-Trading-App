@@ -12,6 +12,7 @@ import { persistCache, rehydrateCache, invalidateCache } from './cache-persisten
 import { CACHE_KEYS } from './cache-keys';
 
 export interface CachedScanResult {
+  scanId?: string | null;
   regime: string;
   candidates: unknown[];
   readyCount: number;

@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
     // the scheduled scan-only session so both produce identical snapshots and
     // the persisted scan stays fresh without a manual click. Grading is
     // returned even if DB persistence fails (non-fatal — results still served).
-    const { gradedCandidates, modelLayer } = await persistScanSnapshot({
+    const { scanId, gradedCandidates, modelLayer } = await persistScanSnapshot({
       userId,
       scanResult: result,
       modelLayerEnabled: userSettings?.modelLayerEnabled ?? false,
@@ -113,6 +113,7 @@ export async function POST(request: NextRequest) {
 
     const responseResult = {
       ...result,
+      scanId,
       candidates: gradedCandidates,
       modelLayer,
     };
@@ -284,6 +285,7 @@ export async function GET() {
     const scoredPassedFilters = scoredCandidates.filter((c) => c.passesAllFilters);
 
     const dbResult = {
+      scanId: latestScan.id,
       regime: latestScan.regime,
       candidates: scoredCandidates,
       readyCount: scoredPassedFilters.filter((c) => c.status === 'READY').length,

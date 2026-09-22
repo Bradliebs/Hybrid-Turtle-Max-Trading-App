@@ -6,6 +6,7 @@ import Navbar from '@/components/shared/Navbar';
 import StageFunnel from '@/components/scan/StageFunnel';
 import TechnicalFilterGrid from '@/components/scan/TechnicalFilterGrid';
 import CandidateTable from '@/components/scan/CandidateTable';
+import CandidateEvidenceReview from '@/components/scan/CandidateEvidenceReview';
 import PositionSizer from '@/components/scan/PositionSizer';
 import dynamic from 'next/dynamic';
 
@@ -55,6 +56,7 @@ const DEFAULT_USER_ID = 'default-user';
 
 /** Shape of the /api/scan response */
 interface ScanApiResult {
+  scanId?: string | null;
   candidates: ScanCandidate[];
   totalScanned?: number;
   passedFilters?: number;
@@ -386,6 +388,8 @@ function ScanPageInner() {
             </button>
           </div>
         </div>
+
+        <CandidateEvidenceReview key={scanResult?.scanId ?? 'no-scan'} scanId={scanResult?.scanId} />
 
         {/* Tab Bar */}
         {/* Fetch Error Banner */}
