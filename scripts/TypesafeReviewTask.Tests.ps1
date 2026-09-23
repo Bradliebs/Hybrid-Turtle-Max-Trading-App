@@ -45,6 +45,18 @@ Describe 'Isolated Typesafe scheduled task' -Tag 'Unit' {
         $Result.Issues | Should -Contain 'PRINCIPAL_MISMATCH'
         $Result.Issues | Should -Contain 'SETTINGS_MISMATCH'
     }
+    It 'accepts the bare local account name Task Scheduler reports for the current user' {
+        $script:Task = Register-TypesafeReviewTask -RepoRoot $Root
+        $Task.Principal.UserId = $env:USERNAME
+        Mock Get-ScheduledTask { $script:Task }
+        (Test-TypesafeReviewTask -RepoRoot $Root).Passed | Should -BeTrue
+    }
+    It 'flags a principal belonging to a different account' {
+        $script:Task = Register-TypesafeReviewTask -RepoRoot $Root
+        $Task.Principal.UserId = 'NT AUTHORITY\SYSTEM'
+        Mock Get-ScheduledTask { $script:Task }
+        (Test-TypesafeReviewTask -RepoRoot $Root).Issues | Should -Contain 'PRINCIPAL_MISMATCH'
+    }
     It 'preserves child exit status and quotes a Node path with spaces' {
         $Node = Join-Path $TestDrive 'fake node.cmd'
         Set-Content -LiteralPath $Node -Value '@exit /b 23'

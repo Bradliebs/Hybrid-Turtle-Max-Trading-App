@@ -36,8 +36,15 @@ function Test-TypesafeReviewTask {
         -not $Task.Settings.StartWhenAvailable -or $Task.Settings.DisallowStartIfOnBatteries -or
         $Task.Settings.StopIfGoingOnBatteries) { $Issues += 'SETTINGS_MISMATCH' }
     $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    # Task Scheduler reports local accounts as a bare name ('bradl'), so compare SIDs.
+    $TaskSid = $null
+    try {
+        $TaskSid = ([Security.Principal.NTAccount]$Task.Principal.UserId).Translate([Security.Principal.SecurityIdentifier]).Value
+    } catch { $TaskSid = $null }
     if ($Task.Principal.LogonType -ne 'S4U' -or $Task.Principal.RunLevel -ne 'Limited' -or
-        $Task.Principal.UserId -notin @($Identity.Name, $Identity.User.Value)) { $Issues += 'PRINCIPAL_MISMATCH' }
+        ($Task.Principal.UserId -notin @($Identity.Name, $Identity.User.Value) -and $TaskSid -ne $Identity.User.Value)) {
+        $Issues += 'PRINCIPAL_MISMATCH'
+    }
     [pscustomobject]@{
         Passed = $Issues.Count -eq 0
         Issues = $Issues
