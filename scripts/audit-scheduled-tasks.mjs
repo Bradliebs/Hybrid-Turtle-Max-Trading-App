@@ -138,7 +138,8 @@ export function auditScheduledTasks(tasks, options = {}) {
     if (expected) {
       seenExpected.add(expected.name.toLowerCase());
 
-      const requiredPath = path.join(repoRoot, expected.requiredPath);
+      // Task Scheduler actions are always Windows paths, so join with win32 separators on every platform (CI runs Linux).
+      const requiredPath = path.win32.join(repoRoot, expected.requiredPath);
       if (!normalizeText(taskToRun).includes(normalizeText(requiredPath))) {
         findings.push({ severity: 'ERROR', taskName, reason: 'EXPECTED_PATH_MISMATCH', detail: `Expected action to include ${requiredPath}` });
       }
