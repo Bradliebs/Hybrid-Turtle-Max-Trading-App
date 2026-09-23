@@ -74,6 +74,15 @@ describe('audit-scheduled-tasks.mjs', () => {
     ]);
   });
 
+  it('splits unescaped schtasks quotes into separate paths and recognises optional tasks', () => {
+    // The fs mock treats any path containing 'HybridTurtle-v6.0' as missing.
+    const [row] = parseSchtasksCsv('"TaskName","Task To Run","Scheduled Task State","Last Result"\r\n"\\HybridTurtle-TypesafeReview","C:\\WINDOWS\\System32\\cmd.exe /d /s /c ""C:\\Repo\\typesafe-review-task.bat" "C:\\HybridTurtle-v6.0\\node js\\node.exe""","Enabled","0"\r\n');
+    const findings = auditScheduledTasks([row], { repoRoot: 'C:\\Repo', expectedTasks: [], retiredTasks: [] });
+    const missing = findings.filter((finding: { reason: string }) => finding.reason === 'MISSING_TARGET_PATH').map((finding: { detail: string }) => finding.detail);
+    expect(missing).toEqual(['C:\\HybridTurtle-v6.0\\node js\\node.exe']);
+    expect(findings.some((finding: { reason: string }) => finding.reason === 'UNTRACKED_HYBRIDTURTLE_TASK')).toBe(false);
+  });
+
   it('flags stale missing paths and untracked HybridTurtle tasks', () => {
     const findings = auditScheduledTasks([
       {

@@ -36,6 +36,11 @@ export const EXPECTED_TASKS = [
   { name: 'HybridTurtle-TelegramHeartbeat', requiredPath: 'telegram-heartbeat-task.bat', registerScript: 'scripts/register-telegram-heartbeat.ps1', expectedTimeLimit: 'PT5M' },
 ];
 
+// Known optional tasks: recognised (not "untracked") but never required. Each has its own dedicated audit.
+export const OPTIONAL_TASKS = [
+  { name: 'HybridTurtle-TypesafeReview', audit: 'scripts/audit-typesafe-review-task.ps1' },
+];
+
 export const RETIRED_TASKS = [
   {
     name: 'HybridTurtle-RescueStops',
@@ -100,7 +105,10 @@ function normalizeText(value) {
 }
 
 function extractQuotedPaths(command) {
-  const quoted = [...String(command ?? '').matchAll(/"([A-Za-z]:\\[^"<>|?*]+)"/g)].map((match) => match[1]);
+  // schtasks CSV does not escape inner quotes, so `""a.bat" "b.exe""` parses as one
+  // quoted span holding both paths. Split spans at whitespace before a drive letter.
+  const quoted = [...String(command ?? '').matchAll(/"([A-Za-z]:\\[^"<>|?*]+)"/g)]
+    .flatMap((match) => match[1].split(/\s+(?=[A-Za-z]:\\)/));
   const unquoted = [...String(command ?? '').matchAll(/\b([A-Za-z]:\\[^\s"<>|?*]+\.(?:bat|cmd|ps1|mjs|js|ts))\b/gi)].map((match) => match[1]);
   return [...new Set([...quoted, ...unquoted])];
 }
@@ -109,6 +117,7 @@ export function auditScheduledTasks(tasks, options = {}) {
   const repoRoot = options.repoRoot ?? ROOT;
   const expectedTasks = options.expectedTasks ?? EXPECTED_TASKS;
   const retiredTasks = options.retiredTasks ?? RETIRED_TASKS;
+  const optionalNames = new Set((options.optionalTasks ?? OPTIONAL_TASKS).map((task) => task.name.toLowerCase()));
   const expectedByName = new Map(expectedTasks.map((task) => [task.name.toLowerCase(), task]));
   const retiredByName = new Map(retiredTasks.map((task) => [task.name.toLowerCase(), task]));
   const seenExpected = new Set();
@@ -188,7 +197,7 @@ export function auditScheduledTasks(tasks, options = {}) {
       }
     }
 
-    if (!expected && !retired) {
+    if (!expected && !retired && !optionalNames.has(taskName.toLowerCase())) {
       findings.push({ severity: 'WARNING', taskName, reason: 'UNTRACKED_HYBRIDTURTLE_TASK', detail: 'Task is not in the expected scheduler manifest' });
     }
   }
