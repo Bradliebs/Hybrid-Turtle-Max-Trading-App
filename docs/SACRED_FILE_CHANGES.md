@@ -32,6 +32,14 @@ Each entry uses this shape (newest at top of the History section):
 
 ## History
 
+### 2026-09-23 - pending - auto-trade.ts: add fail-open Jev veto gate
+
+- File(s): `src/cron/auto-trade.ts` (new gate block, import, header line); logic in new `src/lib/jev-entry-gate.ts`
+- Why: The user explicitly asked for Jev (Typesafe `jev-1.13.0`) to take part in automated buys within the existing guides, overriding the advisory-only default before a 30-signal-day track record exists.
+- Behaviour preserved: Off unless `JEV_AUTO_TRADE_GATE=veto` and `TYPESAFE_REVIEW_ENABLED=true`. Jev can only remove an A-grade candidate (CONTRADICTED/MIXED evidence, or PASS probability at least 0.6, floor 0.5). It cannot add buys or change grades, ranking, sizing, stops, risk gates, live-price revalidation or the attempt cap. Any error, lock contention, budget use, cooldown or incomplete evidence allows the candidate. The gate runs before live-price revalidation so its latency cannot let a stale price reach an order.
+- Tests: `jev-entry-gate.test.ts` (18 new), ordering test in `auto-trade.test.ts`, `forScan` case in `typesafe-review-source.test.ts`. Full suite 2284 passed, 2 skipped; `tsc --noEmit` and eslint clean. Real-database smoke run sent no paid request and released the lock.
+- Author: Copilot CLI agent
+
 ### 2026-09-12 - pending - Capture exact entry attribution and execution evidence
 
 - File(s): `src/cron/auto-trade.ts`; supporting scan persistence, candidate linkage, execution analytics and watchdog tests.

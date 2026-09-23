@@ -1114,3 +1114,37 @@ A fresh saved health check reads YELLOW (position size, cluster and sector
 warnings remain). YELLOW does not block auto-trade, so scheduled sessions can
 resume buying from the next UK session, still subject to every risk gate and the
 two-attempt session cap.
+## 2026-09-23 Jev shadow schedule activated
+
+The user asked to start using Jev alongside auto-trades. The user was
+unavailable to choose a control level, so it stays shadow-only: the pilot task
+now scores each settled shortlist, and nothing in grading, sizing or orders
+reads the results. The user registered `HybridTurtle-TypesafeReview` from an
+administrator terminal after normal registration was denied. The first run
+exited 0 with no recent snapshot and sent no request.
+
+The audit falsely reported `PRINCIPAL_MISMATCH` because Task Scheduler stores
+the bare local name. The audit now also compares SIDs; two Pester cases were
+added and six passed. Every earlier shortlist was BLOCKED_DATA from RED health,
+so tonight's scan should be the first real assessment. Scoring still needs about
+30 signal days.
+
+## 2026-09-23 Jev given an auto-trade veto
+
+Performance was weak (29 trades, 34% win rate, -0.20 average R) and the user
+explicitly asked for Jev in automated buys, within the guides. That overrides
+the advisory-only default, before the planned 30-day record exists. Added
+`src/lib/jev-entry-gate.ts`, called from auto-trade after grading and the
+execution scan save, before the fresh live-price check. Jev can only remove an
+A-grade buy: CONTRADICTED or MIXED evidence, or PASS probability at least 0.6.
+It cannot add buys or change sizing, stops, gates or the session cap. It fails
+open on any error, lock wait, budget or missing evidence, and shares the worker
+ledger and 20-per-day budget. No sacred file was changed.
+
+A code review caught the gate first placed after the live-price check, where
+up to a minute of Jev waiting could let a stale price reach a market order. It
+was moved before the check, with an ordering test. 163 files and 2,284 tests
+passed; typecheck and lint were clean. A real-database smoke run sent no paid
+request and released the lock. Enabled with `JEV_AUTO_TRADE_GATE=veto`. No real
+veto decision has been observed yet. Compare 20-day returns of vetoed against
+allowed candidates before keeping the rule.

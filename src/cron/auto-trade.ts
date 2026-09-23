@@ -31,6 +31,7 @@
  *   - Regime must be BULLISH
  *   - Health must not be RED
  *   - Max 2 trades per session (configurable)
+ *   - Optional Jev veto (JEV_AUTO_TRADE_GATE=veto): can block, never add, a buy; fails open
  *   - Every execution logged to ExecutionLog audit trail
  *   - Immediate Telegram notification per trade
  *
@@ -72,6 +73,7 @@ import { getUKDayOfWeek, getUKTimeString } from '@/lib/uk-time';
 import { groupSkipsByCategory } from '@/lib/skip-reason-category';
 import { acquireAutoTradeLock, releaseAutoTradeLock, AutoTradeLockContentionError, type LockHolder } from '@/lib/auto-trade-lock';
 import { getHistoricalFill, recoverTimedOutBuy } from '@/lib/buy-timeout-recovery';
+import { readJevGateConfig, runJevGateForAutoTrade } from '@/lib/jev-entry-gate';
 
 // ── Configuration ────────────────────────────────────────────
 
@@ -1415,6 +1417,38 @@ async function runAutoTrade(session: Session) {
     }
   }
 
+  // ── Jev entry gate (veto-only, fail-open) ──
+  // Jev can only remove an A-grade candidate; it never adds a buy or changes
+  // sizing, stops or risk gates. Any Jev failure leaves the candidate to the
+  // existing rules. Runs BEFORE live revalidation so time spent waiting on Jev
+  // can never let a stale price reach an order. Off unless JEV_AUTO_TRADE_GATE=veto.
+  const jevVetoSkipped: Array<{ ticker: string; reason: string }> = [];
+  const jevConfig = readJevGateConfig();
+  if (session !== 'scan' && jevConfig.enabled && readyCandidates.length > 0) {
+    const jev = await runJevGateForAutoTrade({
+      config: jevConfig, ownerId: userId, scanId: executionScanId,
+      tickers: readyCandidates.map(c => c.ticker),
+    });
+    console.log(`    [JEV] ${jev.status}`);
+    for (let i = readyCandidates.length - 1; i >= 0; i--) {
+      const c = readyCandidates[i];
+      const verdict = jev.verdicts.get(c.ticker);
+      if (!verdict) continue;
+      console.log(`    [JEV] ${c.ticker}: ${verdict.reason}`);
+      await logExecution({
+        ticker: c.ticker,
+        phase: verdict.action === 'VETO' ? 'JEV_VETO' : 'JEV_ALLOW',
+        accountType: 'N/A',
+        requestBody: JSON.stringify({ scanId: executionScanId, session, gateStatus: jev.status, verdict }),
+        error: verdict.action === 'VETO' ? verdict.reason : null,
+      });
+      if (verdict.action === 'VETO') {
+        jevVetoSkipped.push({ ticker: c.ticker, reason: verdict.reason });
+        readyCandidates.splice(i, 1);
+      }
+    }
+  }
+
   // Live-price revalidation (audit 2026-05-28): scans can be hours old by
   // execution time. Re-fetch live prices for the ready slate and drop any
   // candidate whose price has slipped back below entryTrigger since the scan,
@@ -1596,7 +1630,7 @@ async function runAutoTrade(session: Session) {
   }
 
   const tradeResults: TradeResult[] = [];
-  const skipped: Array<{ ticker: string; reason: string }> = [...liveRevalidationSkipped];
+  const skipped: Array<{ ticker: string; reason: string }> = [...liveRevalidationSkipped, ...jevVetoSkipped];
   // Track ATTEMPTS separately from SUCCESSES. Both are capped at
   // MAX_TRADES_PER_SESSION so a string of failures (insufficient funds, T212
   // rejections, fill-timeouts) cannot let the loop drain the entire candidate

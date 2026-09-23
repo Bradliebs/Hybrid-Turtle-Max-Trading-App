@@ -22,6 +22,34 @@ export interface ReviewSnapshot {
   candidates: Array<{ resultId: string; evidence: CandidateReviewInput }>;
 }
 
+const CANDIDATE_SELECT = `
+        SELECT result.id AS resultId, stock.ticker, result.price, result.ma200,
+          result.entryTrigger, result.adx, result.ncs, result.bqs, result.fws,
+          result.grade, result.gradeReason, outcome.volumeRatio, outcome.relativeStrength,
+          outcome.dataSource AS source, outcome.dataAsOf,
+          outcome.price AS outcomePrice, outcome.ma200 AS outcomeMa200,
+          outcome.entryTrigger AS outcomeEntry, outcome.adx AS outcomeAdx
+        FROM ScanResult AS result
+        JOIN Stock AS stock ON stock.id = result.stockId
+        LEFT JOIN CandidateOutcome AS outcome ON outcome.scanId = result.scanId AND outcome.ticker = stock.ticker`;
+
+function toSnapshot(scan: z.infer<typeof scanSchema>, rows: Array<z.infer<typeof rowSchema>>): ReviewSnapshot {
+  return {
+    id: scan.id, ownerId: scan.userId, scanTime: scan.runDate,
+    candidates: rows.map(row => ({
+      resultId: row.resultId,
+      evidence: {
+        ticker: row.ticker, regime: scan.regime, scanTime: scan.runDate,
+        price: row.price, ma200: row.ma200, entryTrigger: row.entryTrigger, adx: row.adx,
+        ncs: row.ncs, bqs: row.bqs, fws: row.fws, grade: row.grade, gradeReason: row.gradeReason,
+        volumeRatio: row.volumeRatio, relativeStrength: row.relativeStrength, source: row.source, dataAsOf: row.dataAsOf,
+        provenanceMatches: row.price === row.outcomePrice && row.ma200 === row.outcomeMa200 &&
+          row.entryTrigger === row.outcomeEntry && row.adx === row.outcomeAdx,
+      },
+    })),
+  };
+}
+
 export function reviewDatabasePath(databaseUrl: string | undefined): string {
   if (!databaseUrl?.startsWith('file:') || databaseUrl.includes('?') || databaseUrl.includes('\0')) throw new Error('REVIEW_SQLITE_URL_REQUIRED');
   const filePath = databaseUrl.slice(5);
@@ -42,34 +70,30 @@ export class TypesafeReviewSource {
       const rawScan = this.database.prepare('SELECT id, userId, regime, runDate FROM Scan WHERE userId = ? ORDER BY runDate DESC, id DESC LIMIT 1').get(ownerId);
       if (!rawScan) return null;
       const scan = scanSchema.parse(rawScan);
-      const rows = this.database.prepare(`
-        SELECT result.id AS resultId, stock.ticker, result.price, result.ma200,
-          result.entryTrigger, result.adx, result.ncs, result.bqs, result.fws,
-          result.grade, result.gradeReason, outcome.volumeRatio, outcome.relativeStrength,
-          outcome.dataSource AS source, outcome.dataAsOf,
-          outcome.price AS outcomePrice, outcome.ma200 AS outcomeMa200,
-          outcome.entryTrigger AS outcomeEntry, outcome.adx AS outcomeAdx
-        FROM ScanResult AS result
-        JOIN Stock AS stock ON stock.id = result.stockId
-        LEFT JOIN CandidateOutcome AS outcome ON outcome.scanId = result.scanId AND outcome.ticker = stock.ticker
+      const rows = this.database.prepare(`${CANDIDATE_SELECT}
         WHERE result.scanId = ? AND result.passesAllFilters = 1
           AND result.status IN ('READY', 'WATCH', 'WAIT_PULLBACK')
         ORDER BY result.rankScore DESC, stock.ticker ASC, result.id ASC LIMIT 5
       `).all(scan.id).map(row => rowSchema.parse(row));
-      return {
-        id: scan.id, ownerId: scan.userId, scanTime: scan.runDate,
-        candidates: rows.map(row => ({
-          resultId: row.resultId,
-          evidence: {
-            ticker: row.ticker, regime: scan.regime, scanTime: scan.runDate,
-            price: row.price, ma200: row.ma200, entryTrigger: row.entryTrigger, adx: row.adx,
-            ncs: row.ncs, bqs: row.bqs, fws: row.fws, grade: row.grade, gradeReason: row.gradeReason,
-            volumeRatio: row.volumeRatio, relativeStrength: row.relativeStrength, source: row.source, dataAsOf: row.dataAsOf,
-            provenanceMatches: row.price === row.outcomePrice && row.ma200 === row.outcomeMa200 &&
-              row.entryTrigger === row.outcomeEntry && row.adx === row.outcomeAdx,
-          },
-        })),
-      };
+      return toSnapshot(scan, rows);
+    })();
+  }
+
+  /** Named tickers from one owned scan, in the caller's order. Used by the auto-trade Jev gate. */
+  forScan(scanId: string, ownerId: string, tickers: readonly string[]): ReviewSnapshot | null {
+    return this.database.transaction(() => {
+      const rawScan = this.database.prepare('SELECT id, userId, regime, runDate FROM Scan WHERE id = ? AND userId = ?').get(scanId, ownerId);
+      if (!rawScan) return null;
+      const scan = scanSchema.parse(rawScan);
+      const statement = this.database.prepare(`${CANDIDATE_SELECT}
+        WHERE result.scanId = ? AND stock.ticker = ? AND result.passesAllFilters = 1
+        ORDER BY result.id ASC LIMIT 1
+      `);
+      const rows = tickers.flatMap(ticker => {
+        const row = statement.get(scan.id, ticker);
+        return row ? [rowSchema.parse(row)] : [];
+      });
+      return toSnapshot(scan, rows);
     })();
   }
 

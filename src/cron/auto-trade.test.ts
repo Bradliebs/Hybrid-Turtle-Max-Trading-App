@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { revalidateExecutionTechnicals, revalidateLivePrice, evaluateHealthGate, HEALTH_STALE_HOURS, detectRoutingLeak, NO_ACCOUNT_SKIP_REASON } from './auto-trade';
 import type { TechnicalData } from '@/types';
@@ -138,6 +140,17 @@ describe('auto-trade: safety configuration', () => {
     const stopQuantity = -Math.abs(filledQuantity);
     expect(stopQuantity).toBeLessThan(0);
     expect(stopQuantity).toBe(-3.25);
+  });
+
+  it('Jev veto runs before the fresh live-price check, which stays last before orders', () => {
+    const source = fs.readFileSync(path.join(__dirname, 'auto-trade.ts'), 'utf8');
+    const runBody = source.slice(source.indexOf('async function runAutoTrade('));
+    const jevGate = runBody.indexOf('runJevGateForAutoTrade(');
+    const liveCheck = runBody.indexOf('fetchEntryReferencePrices(tickers)');
+    const tradeLoop = runBody.indexOf('for (const candidate of readyCandidates)');
+    expect(jevGate).toBeGreaterThan(0);
+    expect(jevGate).toBeLessThan(liveCheck);
+    expect(liveCheck).toBeLessThan(tradeLoop);
   });
 });
 

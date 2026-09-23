@@ -6,7 +6,9 @@ description: Configuration, boundaries, verification and recovery for the option
 ## Scope
 
 The pilot reviews narrow technical claims against persisted scan-time evidence.
-It cannot change grades, rankings, orders, position sizes, risk gates or stops.
+It cannot change grades, rankings, position sizes, risk gates or stops. The one
+exception is the opt-in auto-trade veto described below, which can only remove
+a buy that already passed every rule.
 Scanning and existing automation do not depend on Typesafe availability.
 The scan page reads saved results; opening it never requests an assessment.
 
@@ -17,8 +19,11 @@ account billing, live evidence coverage or unattended scheduler success.
 ## Validation Status as of 2026-09-22
 
 Local activation checks verified authentication with one successful synthetic
-provider request. The durable ledger was initialized and the saved configuration
-remains disabled; the optional scheduled task has not been registered.
+provider request. The durable ledger was initialized. On 2026-09-23 the pilot was
+enabled and `HybridTurtle-TypesafeReview` was registered from an administrator
+terminal; the audit passed and the first scheduled run exited 0 with
+`NO_RECENT_SETTLED_SNAPSHOT` (no provider request). Shadow mode only: no trading
+path reads the results.
 
 A normal dashboard scan completed and persisted. Its five shortlisted candidates
 were all graded `BLOCKED_DATA` because the saved system health was RED. The review
@@ -107,6 +112,41 @@ scanner already computed. Score predictions against `CandidateOutcome`
 own ranking, across at least 30 distinct signal days before considering any
 influence on trading. Granting influence is a separate decision requiring
 changes to protected execution code.
+
+## Auto-Trade Veto
+
+On 2026-09-23 the user chose to give Jev a role in automated buys before that
+track record exists. The gate lives in `src/lib/jev-entry-gate.ts` and runs in
+`src/cron/auto-trade.ts` after grading and the execution scan save. It runs before
+the fresh live-price check, earnings deferral, sizing, risk gates and orders, so
+time spent waiting on Jev can never let a stale price reach an order.
+
+* **Veto only.** Jev can remove an A-grade candidate. It cannot add a buy or
+  change grades, ranking, size, stops, risk gates or the two-attempt session cap.
+* **Veto rule.** A candidate is vetoed when the evidence answer is `CONTRADICTED`
+  or `MIXED`, or when the pick's PASS probability is at least
+  `JEV_VETO_PASS_PROBABILITY` (default 0.6, minimum 0.5).
+* **Fails open.** Missing key, missing or incomplete evidence, budget use, provider
+  cooldown, lock contention (15-second wait), the 60-second deadline or any error
+  leaves the candidate to the existing rules. Automation never waits on Jev.
+* **Scope.** The top five remaining candidates of the saved execution scan are
+  reviewed. Later candidates are allowed unreviewed.
+* **Shared budget.** Requests use the same ledger, lock and 20-per-day budget as
+  the scheduled worker; a candidate already reviewed for that scan is not charged
+  again.
+* **Audit.** Each verdict writes a `JEV_VETO` or `JEV_ALLOW` ExecutionLog row, and
+  vetoes appear under "Jev veto" in the Telegram session summary.
+
+Enable it with both flags; either one false turns the veto off:
+
+```dotenv
+TYPESAFE_REVIEW_ENABLED=true
+JEV_AUTO_TRADE_GATE=veto
+```
+
+Vetoed candidates still get `CandidateOutcome` forward returns, so compare the
+20-day return of vetoed against allowed candidates before tightening or keeping
+the rule.
 
 ## Local Configuration
 

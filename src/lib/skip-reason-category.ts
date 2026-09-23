@@ -21,6 +21,7 @@ export type SkipCategory =
   | 'BROKER_MAPPING'
   | 'GRADE'
   | 'EARNINGS'
+  | 'JEV_VETO'
   | 'SESSION_CAP'
   | 'SESSION_ABORT'
   | 'UNKNOWN';
@@ -34,6 +35,7 @@ const CATEGORY_LABEL: Record<SkipCategory, string> = {
   BROKER_MAPPING: 'Broker mapping',
   GRADE: 'Entry grade',
   EARNINGS: 'Earnings deferral',
+  JEV_VETO: 'Jev veto',
   SESSION_CAP: 'Session cap',
   SESSION_ABORT: 'Session aborted',
   UNKNOWN: 'Other',
@@ -45,6 +47,8 @@ export function categorySkipLabel(category: SkipCategory): string {
 
 export function categorizeSkipReason(reason: string): SkipCategory {
   const r = (reason || '').toLowerCase();
+
+  if (r.startsWith('jev veto:')) return 'JEV_VETO';
 
   if (
     r.startsWith('regime:') ||
@@ -135,6 +139,7 @@ export function groupSkipsByCategory(
     'RISK_GATES',
     'LIVE_PRICE',
     'EARNINGS',
+    'JEV_VETO',
     'GRADE',
     'SESSION_CAP',
     'UNKNOWN',

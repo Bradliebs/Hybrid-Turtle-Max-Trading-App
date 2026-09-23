@@ -115,6 +115,21 @@ export class TypesafeReviewStore {
     } finally { fs.closeSync(descriptor); }
   }
 
+  findShadow(scanId: string, resultId: string, inputHash: string): ShadowPrediction | null {
+    if (!fs.existsSync(this.shadowPath)) return null;
+    const lines = fs.readFileSync(this.shadowPath, 'utf8').split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (!lines[i].trim()) continue;
+      try {
+        const parsed = shadowPredictionSchema.safeParse(JSON.parse(lines[i]));
+        if (parsed.success && parsed.data.scanId === scanId && parsed.data.resultId === resultId && parsed.data.inputHash === inputHash) {
+          return parsed.data;
+        }
+      } catch { /* skip a torn line */ }
+    }
+    return null;
+  }
+
   observe(ledger: ReviewLedger, now: Date): void {
     if (now.getTime() < Date.parse(ledger.lastObservedAt)) throw new Error('REVIEW_CLOCK_ROLLBACK');
     ledger.lastObservedAt = now.toISOString();

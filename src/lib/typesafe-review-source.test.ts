@@ -38,6 +38,10 @@ describe('read-only snapshot source', () => {
       expect(JSON.stringify(snapshot)).not.toContain('actualFill');
       expect(source.ownsScan('new', 'private')).toBe(false);
       expect(source.latest('missing')).toBeNull();
+      const named = source.forScan('new', 'owner', ['TEST5', 'TEST0', 'MISSING'])!;
+      expect(named.candidates.map(candidate => candidate.evidence.ticker)).toEqual(['TEST5', 'TEST0']);
+      expect(named.candidates[1].evidence.provenanceMatches).toBe(true);
+      expect(source.forScan('new', 'private', ['TEST0'])).toBeNull();
     } finally {
       source.close();
       expect(fs.readFileSync(databasePath)).toEqual(before);
