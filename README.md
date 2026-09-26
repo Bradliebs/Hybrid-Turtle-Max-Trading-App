@@ -12,6 +12,8 @@
 
 Systematic trading workspace built around a Hybrid Turtle process: scan opportunities, enforce risk rules, plan weekly execution, and manage positions with disciplined stop logic.
 
+> **New here?** Start with the **[Beginner's Guide](BEGINNER-GUIDE.md)**. It covers install, first settings, and three ways to use the app: stock ideas only, Trading 212 with you clicking Buy, or fully automatic.
+
 ## Preview
 
 ![HybridTurtle Dashboard Preview](docs/turtlehybrid.png)
@@ -50,7 +52,7 @@ HybridTurtle helps turn discretionary trading into a repeatable workflow:
 
 That's it. The installer creates a `.env` file automatically with secure defaults. You don't need to edit any config files to get started.
 
-> **Advanced:** If you want to customise settings (e.g. Telegram alerts, alternative data provider), see [Environment variables](#environment-variables) below or edit `.env` manually. You can also copy `.env.example` to `.env` **before** running the installer to start from a template instead.
+> **Advanced:** If you want to customise settings (e.g. Telegram alerts, alternative data provider), see [Environment variables](#environment-variables) below or edit `.env` manually. You can also copy `.env.example` to `.env` **before** running the installer to start from a template instead. If you do, change `DISABLE_API_AUTH` to `true` and replace the placeholder secrets. Otherwise scans and settings saves fail with "Unauthorised" on a desktop install.
 
 ## Deployment
 
@@ -218,6 +220,7 @@ All routes are under `/api`. Key endpoint groups:
 
 ## Documentation
 
+- [BEGINNER-GUIDE.md](BEGINNER-GUIDE.md) — start here: plain-English guide for stock pickers, Trading 212 users and automatic trading
 - [USER-GUIDE.md](USER-GUIDE.md) — complete end-user guide (non-technical)
 - [SETUP-README.md](SETUP-README.md) — concise setup + troubleshooting
 - [DASHBOARD-GUIDE.md](DASHBOARD-GUIDE.md) — full feature and operations reference
