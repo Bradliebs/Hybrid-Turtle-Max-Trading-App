@@ -32,6 +32,7 @@
  *   - Health must not be RED
  *   - Max 2 trades per session (configurable)
  *   - Optional Jev veto (JEV_AUTO_TRADE_GATE=veto): can block, never add, a buy; fails open
+ *   - Optional ETF-only mode (Settings > Safety Controls): only ETF-sleeve buys
  *   - Every execution logged to ExecutionLog audit trail
  *   - Immediate Telegram notification per trade
  *
@@ -59,7 +60,7 @@ import { Trading212Client, Trading212Error, type T212PendingOrder } from '@/lib/
 import type { T212AccountType } from '@/lib/trading212-dual';
 import { sendTelegramMessage, sendThrottledTelegramAlert } from '@/lib/telegram';
 import { sendAlert } from '@/lib/alert-service';
-import { assertSubmissionAllowed, SafetyControlError, isAutoTradingEnabled } from '../../packages/workflow/src';
+import { assertSubmissionAllowed, SafetyControlError, isAutoTradingEnabled, getKillSwitchSettings } from '../../packages/workflow/src';
 import { getBatchPrices, getTechnicalData, normalizeBatchPricesToGBP, getFXRate, getMarketRegime } from '@/lib/market-data';
 import { fetchT212LivePrices } from '@/lib/position-sync';
 import { classifyCandidate, DEFAULT_GRADE_THRESHOLDS, type GradingContext, type CandidateGrade, type GradeThresholds } from '@/lib/candidate-grade';
@@ -322,7 +323,7 @@ const SESSION_CONFIGS: Record<Session, SessionConfig> = {
 
 // ── Helpers ──────────────────────────────────────────────────
 
-function isStockForSession(ticker: string, sleeve: string, session: Session): boolean {
+export function isStockForSession(ticker: string, sleeve: string, session: Session): boolean {
   if (session === 'scan') return false; // Scan session never trades
   const config = SESSION_CONFIGS[session];
   if (!config.sleeves.includes(sleeve as Sleeve)) return false;
@@ -331,6 +332,13 @@ function isStockForSession(ticker: string, sleeve: string, session: Session): bo
   if (session === 'uk' || session === 'uk-mid') return ticker.endsWith('.L');
   // US sessions: non-.L stocks
   return !ticker.endsWith('.L');
+}
+
+export const ETF_ONLY_SKIP_REASON = 'ETF-only mode: not an ETF';
+
+/** ETF-only mode keeps a candidate only when its sleeve is ETF. */
+export function isEtfOnlyEligible(sleeve: string): boolean {
+  return sleeve === 'ETF';
 }
 
 // ── Execution Log (audit trail) ──────────────────────────────
@@ -1404,6 +1412,21 @@ async function runAutoTrade(session: Session) {
   // Sort by rank (highest first)
   readyCandidates.sort((a, b) => b.rankScore - a.rankScore);
 
+  // ETF-only mode (Settings > Safety Controls): only ETF-sleeve candidates may
+  // be bought. Runs before Jev and live revalidation so skipped stocks cost no
+  // paid review or quote. Reported as skips so the Telegram summary explains it.
+  const etfOnlySkipped: Array<{ ticker: string; reason: string }> = [];
+  const etfOnly = session !== 'scan' && (await getKillSwitchSettings()).etfOnlyAutoTrading;
+  if (etfOnly) {
+    for (let i = readyCandidates.length - 1; i >= 0; i--) {
+      if (!isEtfOnlyEligible(readyCandidates[i].sleeve)) {
+        etfOnlySkipped.push({ ticker: readyCandidates[i].ticker, reason: ETF_ONLY_SKIP_REASON });
+        readyCandidates.splice(i, 1);
+      }
+    }
+    console.log(`    [ETF-ONLY] Mode ON — ${readyCandidates.length} ETF candidate(s) kept, ${etfOnlySkipped.length} stock(s) skipped`);
+  }
+
   let executionScanId: string | null = null;
   if (session !== 'scan' && readyCandidates.length > 0) {
     try {
@@ -1630,7 +1653,7 @@ async function runAutoTrade(session: Session) {
   }
 
   const tradeResults: TradeResult[] = [];
-  const skipped: Array<{ ticker: string; reason: string }> = [...liveRevalidationSkipped, ...jevVetoSkipped];
+  const skipped: Array<{ ticker: string; reason: string }> = [...etfOnlySkipped, ...liveRevalidationSkipped, ...jevVetoSkipped];
   // Track ATTEMPTS separately from SUCCESSES. Both are capped at
   // MAX_TRADES_PER_SESSION so a string of failures (insufficient funds, T212
   // rejections, fill-timeouts) cannot let the loop drain the entire candidate

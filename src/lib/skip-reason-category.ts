@@ -22,6 +22,7 @@ export type SkipCategory =
   | 'GRADE'
   | 'EARNINGS'
   | 'JEV_VETO'
+  | 'ETF_ONLY'
   | 'SESSION_CAP'
   | 'SESSION_ABORT'
   | 'UNKNOWN';
@@ -36,6 +37,7 @@ const CATEGORY_LABEL: Record<SkipCategory, string> = {
   GRADE: 'Entry grade',
   EARNINGS: 'Earnings deferral',
   JEV_VETO: 'Jev veto',
+  ETF_ONLY: 'ETF-only mode',
   SESSION_CAP: 'Session cap',
   SESSION_ABORT: 'Session aborted',
   UNKNOWN: 'Other',
@@ -49,6 +51,8 @@ export function categorizeSkipReason(reason: string): SkipCategory {
   const r = (reason || '').toLowerCase();
 
   if (r.startsWith('jev veto:')) return 'JEV_VETO';
+
+  if (r.startsWith('etf-only mode:')) return 'ETF_ONLY';
 
   if (
     r.startsWith('regime:') ||
@@ -140,6 +144,7 @@ export function groupSkipsByCategory(
     'LIVE_PRICE',
     'EARNINGS',
     'JEV_VETO',
+    'ETF_ONLY',
     'GRADE',
     'SESSION_CAP',
     'UNKNOWN',

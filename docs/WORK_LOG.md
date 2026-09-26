@@ -1148,3 +1148,20 @@ passed; typecheck and lint were clean. A real-database smoke run sent no paid
 request and released the lock. Enabled with `JEV_AUTO_TRADE_GATE=veto`. No real
 veto decision has been observed yet. Compare 20-day returns of vetoed against
 allowed candidates before keeping the rule.
+
+## 2026-09-26 ETF-only auto-trading switch
+
+The user asked for an option to trade only ETFs when needed. Added an
+"ETF-only auto-trading" switch to Settings > Safety Controls, stored with the
+existing kill switches, so no schema migration was needed. When on, scheduled
+sessions still scan and grade everything but only buy ETF-sleeve candidates.
+Skipped A-grade stocks appear as "ETF-only mode" in the Telegram summary. The
+filter runs before the Jev gate and live-price check, so skipped stocks cost
+nothing. Manual buys and existing positions are unaffected. Off by default.
+
+The universe holds 58 active ETFs (9 with .L tickers, 49 without), including
+leveraged or inverse funds such as SPXS and SQQQ. Several LSE-listed ETFs
+without a .L suffix (for example EIMI, SGLN, CNDX) route to US sessions. That
+is an existing routing quirk, noted for follow-up and not changed. The full
+suite passed (2,291 tests), and an API toggle round-trip left the other
+switches unchanged.

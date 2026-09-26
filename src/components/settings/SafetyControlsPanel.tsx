@@ -141,6 +141,15 @@ export default function SafetyControlsPanel() {
               saving={savingKey === 'enableAutoTrading'}
               onToggle={() => updateSwitch('enableAutoTrading')}
             />
+            <div className="mt-3">
+              <ToggleRow
+                label="ETF-only auto-trading"
+                description="When ON, scheduled sessions only buy ETFs. Stocks are still scanned and graded, and any A-grade stock that is skipped is listed as 'ETF-only mode' in the Telegram summary. Manual buys and existing positions are not affected."
+                checked={settings.etfOnlyAutoTrading}
+                saving={savingKey === 'etfOnlyAutoTrading'}
+                onToggle={() => updateSwitch('etfOnlyAutoTrading')}
+              />
+            </div>
           </div>
 
           <div className="rounded-lg border border-border bg-navy-800/50 px-4 py-3 text-xs text-muted-foreground">

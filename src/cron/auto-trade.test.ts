@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { revalidateExecutionTechnicals, revalidateLivePrice, evaluateHealthGate, HEALTH_STALE_HOURS, detectRoutingLeak, NO_ACCOUNT_SKIP_REASON } from './auto-trade';
+import { revalidateExecutionTechnicals, revalidateLivePrice, evaluateHealthGate, HEALTH_STALE_HOURS, detectRoutingLeak, NO_ACCOUNT_SKIP_REASON, isStockForSession, isEtfOnlyEligible, ETF_ONLY_SKIP_REASON } from './auto-trade';
+import { categorizeSkipReason } from '@/lib/skip-reason-category';
 import type { TechnicalData } from '@/types';
 
 /**
@@ -12,22 +13,30 @@ import type { TechnicalData } from '@/types';
  * a live broker connection or database.
  */
 
-// ── Session filtering (pure function extracted from auto-trade logic) ──
+// ── Session filtering (real exported function) ──
 
-function isStockForSession(ticker: string, sleeve: string, session: string): boolean {
-  if (session === 'scan') return false;
-  const sessionSleeves: Record<string, string[]> = {
-    uk: ['CORE', 'ETF'],
-    'uk-mid': ['CORE', 'ETF'],
-    us: ['CORE', 'HIGH_RISK', 'ETF'],
-    'us-mid': ['CORE', 'HIGH_RISK', 'ETF'],
-    'us-close': ['CORE', 'HIGH_RISK', 'ETF'],
-  };
-  const sleeves = sessionSleeves[session];
-  if (!sleeves || !sleeves.includes(sleeve)) return false;
-  if (session === 'uk' || session === 'uk-mid') return ticker.endsWith('.L');
-  return !ticker.endsWith('.L');
-}
+describe('auto-trade: ETF-only mode', () => {
+  it('keeps only ETF-sleeve candidates', () => {
+    expect(isEtfOnlyEligible('ETF')).toBe(true);
+    expect(isEtfOnlyEligible('CORE')).toBe(false);
+    expect(isEtfOnlyEligible('HIGH_RISK')).toBe(false);
+    expect(isEtfOnlyEligible('HEDGE')).toBe(false);
+  });
+
+  it('groups ETF-only skips under their own Telegram category', () => {
+    expect(categorizeSkipReason(ETF_ONLY_SKIP_REASON)).toBe('ETF_ONLY');
+  });
+
+  it('filters before Jev and live revalidation so skipped stocks cost nothing', () => {
+    const source = fs.readFileSync(path.join(__dirname, 'auto-trade.ts'), 'utf8');
+    const runBody = source.slice(source.indexOf('async function runAutoTrade('));
+    const etfFilter = runBody.indexOf('isEtfOnlyEligible(');
+    expect(etfFilter).toBeGreaterThan(0);
+    expect(etfFilter).toBeLessThan(runBody.indexOf('runJevGateForAutoTrade('));
+    expect(etfFilter).toBeLessThan(runBody.indexOf('fetchEntryReferencePrices(tickers)'));
+    expect(runBody).toContain('[...etfOnlySkipped,');
+  });
+});
 
 describe('auto-trade: session filtering', () => {
   it('UK session only includes .L stocks', () => {
@@ -95,6 +104,7 @@ describe('auto-trade: safety configuration', () => {
       disableAutomatedSubmissions: false,
       disableScansWhenDataStale: true,
       enableAutoTrading: false,
+      etfOnlyAutoTrading: false,
       updatedAt: null,
     };
     expect(defaults.enableAutoTrading).toBe(false);

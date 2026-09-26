@@ -17,6 +17,8 @@ export interface KillSwitchSettings {
   disableAutomatedSubmissions: boolean;
   disableScansWhenDataStale: boolean;
   enableAutoTrading: boolean;
+  /** When true, scheduled auto-trade only buys ETF-sleeve candidates. Manual execution is unaffected. */
+  etfOnlyAutoTrading: boolean;
   updatedAt: string | null;
 }
 
@@ -39,6 +41,7 @@ const DEFAULT_KILL_SWITCH_SETTINGS: KillSwitchSettings = {
   disableAutomatedSubmissions: false,
   disableScansWhenDataStale: true,
   enableAutoTrading: false,
+  etfOnlyAutoTrading: false,
   updatedAt: null,
 };
 
@@ -47,6 +50,7 @@ const killSwitchSchema = z.object({
   disableAutomatedSubmissions: z.boolean(),
   disableScansWhenDataStale: z.boolean(),
   enableAutoTrading: z.boolean().default(false),
+  etfOnlyAutoTrading: z.boolean().default(false),
   updatedAt: z.string().nullable(),
 });
 

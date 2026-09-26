@@ -32,6 +32,14 @@ Each entry uses this shape (newest at top of the History section):
 
 ## History
 
+### 2026-09-26 - pending - auto-trade.ts: optional ETF-only auto-trading mode
+
+- File(s): `src/cron/auto-trade.ts` (ETF-only filter block, import, header line, exported `isStockForSession`, new `isEtfOnlyEligible` and `ETF_ONLY_SKIP_REASON`); setting in `packages/workflow/src/safety-controls.ts`
+- Why: The user asked for an option to trade only ETFs when needed.
+- Behaviour preserved: Off by default; stored as `etfOnlyAutoTrading` in the existing kill-switch AppSetting JSON (no schema migration), and older saved records keep their switches. When on, it only removes non-ETF candidates from the A-grade buy list; grading, ranking, sizing, stops, risk gates, live-price revalidation, the Jev veto and the attempt cap are unchanged. It runs before the Jev gate and live revalidation so skipped stocks cost no paid review or quote. Manual execution, scan-only sessions and existing positions are unaffected.
+- Tests: new `packages/workflow/src/safety-controls.test.ts` (3), ETF-only cases in `auto-trade.test.ts` (session-filter tests now exercise the real exported function). Full suite 2291 passed, 2 skipped; `tsc --noEmit` and eslint clean; API toggle round-trip verified on the running dashboard.
+- Author: Copilot CLI agent
+
 ### 2026-09-23 - pending - auto-trade.ts: add fail-open Jev veto gate
 
 - File(s): `src/cron/auto-trade.ts` (new gate block, import, header line); logic in new `src/lib/jev-entry-gate.ts`
