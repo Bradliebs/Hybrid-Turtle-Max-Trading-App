@@ -76,6 +76,7 @@ typesafe-review.log
 data/typesafe-review/
 rescue-stops.log
 ticker-audit.log
+dashboard-restart.log
 
 # HVE-Core AI workflow artifacts (local only)
 .copilot-tracking/

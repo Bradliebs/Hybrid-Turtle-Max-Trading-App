@@ -43,21 +43,12 @@ if not exist "node_modules" (
     )
 )
 
-:: Desktop installs need DISABLE_API_AUTH=true. Otherwise scans and settings
-:: saves fail with "Unauthorised", or "Too many requests" once signed in.
-:: Next.js resolves the final value itself: the last duplicate line wins and
-:: .env.local / .env.production override .env. Warn only: LAN setups keep auth on.
-node -e "try { require('@next/env').loadEnvConfig(process.cwd(), false) } catch (e) { process.exit(0) } process.exit(process.env.DISABLE_API_AUTH === 'true' ? 0 : 1)"
-if errorlevel 1 (
-    echo.
-    echo  WARNING: DISABLE_API_AUTH is not true, so the dashboard will ask for a login.
-    echo     On a single-user PC, scans and settings saves then fail with
-    echo     "Unauthorised" or "Too many requests".
-    echo     Fix: open .env in Notepad, make sure the only DISABLE_API_AUTH line reads
-    echo     DISABLE_API_AUTH=true  ^(also check for .env.local or .env.production^),
-    echo     then close this window and start the dashboard again.
-    echo.
-)
+:: Desktop installs need DISABLE_API_AUTH=true and real secrets. A .env copied
+:: from .env.example causes "Unauthorised"/"Too many requests", weakly encrypted
+:: Trading 212 keys and a locked Telegram panel. The check uses the same loader
+:: as the dashboard, so duplicate lines and .env.local/.env.production count.
+:: Warn only: LAN setups deliberately keep auth on.
+node scripts\check-env.mjs
 
 :: Ensure Prisma client is generated
 if not exist "node_modules\.prisma" (

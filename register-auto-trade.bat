@@ -45,7 +45,8 @@ echo     6. HybridTurtle-Trade-USC    20:30 Mon-Fri  (US near-close)
 echo     7. HybridTurtle-HourlyStatus hourly Mon-Fri (Telegram updates)
 echo.
 echo   Requirements:
-echo     - ENABLE_AUTO_TRADING=true in .env
+echo     - Auto-trading switched on in Settings ^> Safety Controls
+echo       ^(or ENABLE_AUTO_TRADING=true in .env on first run^)
 echo     - Trading 212 account connected in Settings
 echo     - PC must be on at scheduled times
 echo.

@@ -2,9 +2,11 @@
 # Consumed by: docs/DEPLOYMENT.md
 # Consumes: Dockerfile, .env, services/model-service/Dockerfile
 # Risk-sensitive: NO
-# Last modified: 2026-03-09
+# Last modified: 2026-09-26
 # Notes: Stable local runtime uses the existing SQLite-backed app container.
 #        The Postgres service is provided as a scaffold for future provider migration work.
+#        Scheduled jobs (nightly stops, midday sync, auto-trade) are Windows Task
+#        Scheduler tasks and do not run in this container. See docs/DEPLOYMENT.md.
 
 services:
   app:
@@ -18,12 +20,20 @@ services:
       NEXTAUTH_URL: http://localhost:3000
       DATABASE_URL: ${DATABASE_URL:-file:./dev.db}
       MODEL_SERVICE_URL: ${MODEL_SERVICE_URL:-http://model-service:8000}
-      BROKER_ADAPTER: ${BROKER_ADAPTER:-mock}
+      # Desktop mode, same as start.bat: single user, no login. Safe only because
+      # the port below is published on the host's 127.0.0.1. To expose the app on
+      # your network, set this to 'false' AND change the port to '3000:3000'.
+      DISABLE_API_AUTH: 'true'
+      # 'disabled' matches the desktop installer. Trading 212 sync uses the app's
+      # own Trading 212 connection (Settings > Broker), not this adapter. 'mock'
+      # feeds the workflow a simulated broker and must not be used with real accounts.
+      BROKER_ADAPTER: ${BROKER_ADAPTER:-disabled}
     ports:
-      - '3000:3000'
+      - '127.0.0.1:3000:3000'
     volumes:
       - ./prisma:/app/prisma
       - ./reports:/app/reports
+      - ./data:/app/data
     restart: unless-stopped
     healthcheck:
       test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/api/heartbeat').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]

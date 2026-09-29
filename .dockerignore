@@ -9,3 +9,11 @@ prisma/*.backup-*
 prisma/dev.db.backup-*
 *.local
 *.log
+# Secrets and live data must never be baked into the image. .env is supplied at
+# runtime through docker-compose env_file; the database comes from the volume.
+.env
+.env.*
+!.env.example
+prisma/dev.db
+prisma/dev.db-journal
+data
