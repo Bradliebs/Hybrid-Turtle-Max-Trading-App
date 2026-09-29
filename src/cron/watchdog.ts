@@ -24,14 +24,15 @@ import {
   MAX_CONSECUTIVE_RESTART_FAILURES,
 } from './watchdog-restart-budget';
 import { getUKDayOfWeek, getUKHour } from '@/lib/uk-time';
-import { checkSchedulerFindings, parseSchedulerAuditOutput, checkNightlyNotification, checkZeroTradesOnBullishDay, checkNightlyHeartbeatStatus, type AuditFinding } from './watchdog-checks';
+import { checkSchedulerFindings, parseSchedulerAuditOutput, checkNightlyNotification, checkZeroTradesOnBullishDay, checkNightlyHeartbeatStatus, BUY_DECISION_PHASES, buyableAGradeWhere, type AuditFinding } from './watchdog-checks';
+import { getKillSwitchSettings } from '../../packages/workflow/src';
 
 const log = createCronLogger('watchdog');
 const NIGHTLY_STALE_HOURS = 26;
 
 export async function countBuyAttemptsSince(since: Date): Promise<number> {
   return prisma.executionLog.count({
-    where: { createdAt: { gte: since }, phase: { in: ['BUY_PLACED', 'BUY_FAILED'] } },
+    where: { createdAt: { gte: since }, phase: { in: [...BUY_DECISION_PHASES] } },
   });
 }
 
@@ -235,9 +236,8 @@ async function runWatchdog(): Promise<void> {
 
       let aGradeWithShares = 0;
       if (latestScan) {
-        aGradeWithShares = await prisma.scanResult.count({
-          where: { scanId: latestScan.id, grade: 'A_GRADE_BUY', shares: { gt: 0 } },
-        });
+        const etfOnly = (await getKillSwitchSettings().catch(() => null))?.etfOnlyAutoTrading ?? false;
+        aGradeWithShares = await prisma.scanResult.count({ where: buyableAGradeWhere(latestScan.id, etfOnly) });
       }
 
       alerts.push(

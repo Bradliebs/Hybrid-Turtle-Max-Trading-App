@@ -32,6 +32,14 @@ Each entry uses this shape (newest at top of the History section):
 
 ## History
 
+### 2026-09-29 - pending - auto-trade.ts: lazy Jev gate load, tested filters, JEV_SKIPPED phase
+
+- File(s): `src/cron/auto-trade.ts` (Jev and ETF-only blocks now call `src/lib/auto-trade-filters.ts`; the gate module is imported dynamically only when enabled); new `src/lib/auto-trade-filters.ts`
+- Why: Review with a second model (Sonnet 5.5) found that the static import of `jev-entry-gate.ts` pulled the native `better-sqlite3` module into every auto-trade start, even with the veto off, so a native-module break would stop all sessions. The veto and ETF-only filtering were only tested by source-order checks, and unreviewed Jev allows were logged as `JEV_ALLOW`.
+- Behaviour preserved: Order of steps is unchanged (ETF-only, scan snapshot, Jev, live-price revalidation, earnings, sizing, risk gates, orders). Both filters only remove candidates and preserve rank order. The veto rule, threshold and the request sent to Jev are unchanged. A gate load failure now allows every candidate (`GATE_LOAD_FAILED`) instead of crashing the session.
+- Tests: new `auto-trade-filters.test.ts`; lazy-import and ordering checks in `auto-trade.test.ts`; lazy import verified under `tsx`. Full suite 2312 passed, 2 skipped; `tsc --noEmit` and eslint clean.
+- Author: Copilot CLI agent
+
 ### 2026-09-26 - pending - auto-trade.ts: optional ETF-only auto-trading mode
 
 - File(s): `src/cron/auto-trade.ts` (ETF-only filter block, import, header line, exported `isStockForSession`, new `isEtfOnlyEligible` and `ETF_ONLY_SKIP_REASON`); setting in `packages/workflow/src/safety-controls.ts`

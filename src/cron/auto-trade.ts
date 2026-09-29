@@ -74,7 +74,7 @@ import { getUKDayOfWeek, getUKTimeString } from '@/lib/uk-time';
 import { groupSkipsByCategory } from '@/lib/skip-reason-category';
 import { acquireAutoTradeLock, releaseAutoTradeLock, AutoTradeLockContentionError, type LockHolder } from '@/lib/auto-trade-lock';
 import { getHistoricalFill, recoverTimedOutBuy } from '@/lib/buy-timeout-recovery';
-import { readJevGateConfig, runJevGateForAutoTrade } from '@/lib/jev-entry-gate';
+import { readJevGateConfig, partitionEtfOnly, partitionJevVerdicts, jevLogPhase, type JevVerdict } from '@/lib/auto-trade-filters';
 
 // ── Configuration ────────────────────────────────────────────
 
@@ -334,12 +334,8 @@ export function isStockForSession(ticker: string, sleeve: string, session: Sessi
   return !ticker.endsWith('.L');
 }
 
-export const ETF_ONLY_SKIP_REASON = 'ETF-only mode: not an ETF';
-
-/** ETF-only mode keeps a candidate only when its sleeve is ETF. */
-export function isEtfOnlyEligible(sleeve: string): boolean {
-  return sleeve === 'ETF';
-}
+// ETF-only helpers now live in the dependency-free auto-trade-filters module.
+export { ETF_ONLY_SKIP_REASON, isEtfOnlyEligible } from '@/lib/auto-trade-filters';
 
 // ── Execution Log (audit trail) ──────────────────────────────
 
@@ -1415,15 +1411,12 @@ async function runAutoTrade(session: Session) {
   // ETF-only mode (Settings > Safety Controls): only ETF-sleeve candidates may
   // be bought. Runs before Jev and live revalidation so skipped stocks cost no
   // paid review or quote. Reported as skips so the Telegram summary explains it.
-  const etfOnlySkipped: Array<{ ticker: string; reason: string }> = [];
+  let etfOnlySkipped: Array<{ ticker: string; reason: string }> = [];
   const etfOnly = session !== 'scan' && (await getKillSwitchSettings()).etfOnlyAutoTrading;
   if (etfOnly) {
-    for (let i = readyCandidates.length - 1; i >= 0; i--) {
-      if (!isEtfOnlyEligible(readyCandidates[i].sleeve)) {
-        etfOnlySkipped.push({ ticker: readyCandidates[i].ticker, reason: ETF_ONLY_SKIP_REASON });
-        readyCandidates.splice(i, 1);
-      }
-    }
+    const etf = partitionEtfOnly(readyCandidates);
+    readyCandidates.splice(0, readyCandidates.length, ...etf.kept);
+    etfOnlySkipped = etf.skipped;
     console.log(`    [ETF-ONLY] Mode ON — ${readyCandidates.length} ETF candidate(s) kept, ${etfOnlySkipped.length} stock(s) skipped`);
   }
 
@@ -1445,31 +1438,39 @@ async function runAutoTrade(session: Session) {
   // sizing, stops or risk gates. Any Jev failure leaves the candidate to the
   // existing rules. Runs BEFORE live revalidation so time spent waiting on Jev
   // can never let a stale price reach an order. Off unless JEV_AUTO_TRADE_GATE=veto.
-  const jevVetoSkipped: Array<{ ticker: string; reason: string }> = [];
+  // The gate module (and its native SQLite dependency) is loaded only when the
+  // veto is enabled, so a load failure can never stop the session.
+  let jevVetoSkipped: Array<{ ticker: string; reason: string }> = [];
   const jevConfig = readJevGateConfig();
   if (session !== 'scan' && jevConfig.enabled && readyCandidates.length > 0) {
-    const jev = await runJevGateForAutoTrade({
-      config: jevConfig, ownerId: userId, scanId: executionScanId,
-      tickers: readyCandidates.map(c => c.ticker),
-    });
+    let jev: { status: string; verdicts: Map<string, JevVerdict> };
+    try {
+      const { runJevGateForAutoTrade } = await import('@/lib/jev-entry-gate');
+      jev = await runJevGateForAutoTrade({
+        config: jevConfig, ownerId: userId, scanId: executionScanId,
+        tickers: readyCandidates.map(c => c.ticker),
+      });
+    } catch (loadErr) {
+      console.warn(`    [JEV] Gate unavailable, all candidates allowed: ${(loadErr as Error).message}`);
+      jev = { status: 'GATE_LOAD_FAILED', verdicts: new Map(readyCandidates.map(c => [c.ticker,
+        { action: 'ALLOW' as const, reviewed: false, reason: 'Jev not consulted: gate failed to load' }])) };
+    }
     console.log(`    [JEV] ${jev.status}`);
-    for (let i = readyCandidates.length - 1; i >= 0; i--) {
-      const c = readyCandidates[i];
+    for (const c of readyCandidates) {
       const verdict = jev.verdicts.get(c.ticker);
       if (!verdict) continue;
       console.log(`    [JEV] ${c.ticker}: ${verdict.reason}`);
       await logExecution({
         ticker: c.ticker,
-        phase: verdict.action === 'VETO' ? 'JEV_VETO' : 'JEV_ALLOW',
+        phase: jevLogPhase(verdict),
         accountType: 'N/A',
         requestBody: JSON.stringify({ scanId: executionScanId, session, gateStatus: jev.status, verdict }),
         error: verdict.action === 'VETO' ? verdict.reason : null,
       });
-      if (verdict.action === 'VETO') {
-        jevVetoSkipped.push({ ticker: c.ticker, reason: verdict.reason });
-        readyCandidates.splice(i, 1);
-      }
     }
+    const applied = partitionJevVerdicts(readyCandidates, jev.verdicts);
+    readyCandidates.splice(0, readyCandidates.length, ...applied.kept);
+    jevVetoSkipped = applied.vetoed;
   }
 
   // Live-price revalidation (audit 2026-05-28): scans can be hours old by

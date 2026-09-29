@@ -34,6 +34,15 @@ function setup() {
 afterEach(() => directories.splice(0).forEach(directory => fs.rmSync(directory, { recursive: true, force: true })));
 
 describe('isolated advisory worker', () => {
+  it('reports LOCK_BUSY without failing when the auto-trade gate holds the lock', async () => {
+    const options = setup();
+    const gate = new TypesafeReviewStore(options.store.directory);
+    gate.acquire();
+    try {
+      expect(await runTypesafeReview(options)).toEqual({ status: 'LOCK_BUSY', failed: false });
+      expect(options.evaluate).not.toHaveBeenCalled();
+    } finally { gate.release(); }
+  });
   it('reviews only five and sends no duplicate requests on second tick', async () => {
     const options = setup();
     expect(await runTypesafeReview(options)).toEqual({ status: 'COMPLETE', failed: false });

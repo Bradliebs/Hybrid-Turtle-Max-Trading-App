@@ -30,11 +30,21 @@ describe('auto-trade: ETF-only mode', () => {
   it('filters before Jev and live revalidation so skipped stocks cost nothing', () => {
     const source = fs.readFileSync(path.join(__dirname, 'auto-trade.ts'), 'utf8');
     const runBody = source.slice(source.indexOf('async function runAutoTrade('));
-    const etfFilter = runBody.indexOf('isEtfOnlyEligible(');
+    const etfFilter = runBody.indexOf('partitionEtfOnly(');
     expect(etfFilter).toBeGreaterThan(0);
     expect(etfFilter).toBeLessThan(runBody.indexOf('runJevGateForAutoTrade('));
     expect(etfFilter).toBeLessThan(runBody.indexOf('fetchEntryReferencePrices(tickers)'));
     expect(runBody).toContain('[...etfOnlySkipped,');
+  });
+
+  it('loads the Jev gate lazily so its native dependency cannot stop a session', () => {
+    const source = fs.readFileSync(path.join(__dirname, 'auto-trade.ts'), 'utf8');
+    expect(source).not.toMatch(/^import[^\n]*['"]@\/lib\/jev-entry-gate['"]/m);
+    const runBody = source.slice(source.indexOf('async function runAutoTrade('));
+    const lazyImport = runBody.indexOf("await import('@/lib/jev-entry-gate')");
+    expect(lazyImport).toBeGreaterThan(0);
+    expect(runBody.slice(runBody.lastIndexOf('try {', lazyImport), lazyImport)).toContain('try {');
+    expect(runBody).toContain("'GATE_LOAD_FAILED'");
   });
 });
 

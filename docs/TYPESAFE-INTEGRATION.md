@@ -134,8 +134,12 @@ time spent waiting on Jev can never let a stale price reach an order.
 * **Shared budget.** Requests use the same ledger, lock and 20-per-day budget as
   the scheduled worker; a candidate already reviewed for that scan is not charged
   again.
-* **Audit.** Each verdict writes a `JEV_VETO` or `JEV_ALLOW` ExecutionLog row, and
-  vetoes appear under "Jev veto" in the Telegram session summary.
+* **Audit.** Each verdict writes an ExecutionLog row: `JEV_VETO`, `JEV_ALLOW`
+  (Jev reviewed and allowed) or `JEV_SKIPPED` (Jev was not consulted, with the
+  reason). Vetoes appear under "Jev veto" in the Telegram session summary.
+* **Isolated load.** `auto-trade.ts` loads the gate module (and its native
+  `better-sqlite3` dependency) only when the veto is enabled, inside `try/catch`.
+  A load failure logs `GATE_LOAD_FAILED` and allows every candidate.
 
 Enable it with both flags; either one false turns the veto off:
 
@@ -147,6 +151,37 @@ JEV_AUTO_TRADE_GATE=veto
 Vetoed candidates still get `CandidateOutcome` forward returns, so compare the
 20-day return of vetoed against allowed candidates before tightening or keeping
 the rule.
+
+### Live evidence and the claim-echo finding (2026-09-29)
+
+In the first six days the veto reviewed 6 real buy candidates and allowed all 6.
+All 12 completed reviews answered evidence `SUPPORTED`. The `pick` answer tracked
+the scanner's own `claim` text exactly: every A-grade "Trigger met … scores
+strong" claim got TAKE (PASS 0.06–0.22), and every "not A-grade" or "waiting for
+pullback" claim got PASS (0.57–1.00). Evidence also answered SUPPORTED for a
+"volume confirmed" claim with a 0.27 volume ratio; the model cannot see the
+session-scaled volume threshold. The veto is therefore unlikely ever to fire on
+A-grade candidates, and shadow scoring of `pick` mostly measures the scanner's
+own grade.
+
+A claim-blind pick was tried and reverted the same day. A fourth question in the
+same request, telling Jev to ignore `state.claim`, was sent once with the
+supervised `--synthetic` check. The request succeeded, but:
+* every shadow answer then failed validation (`SHADOW_ANSWER_INVALID`);
+* the evidence answer for the same synthetic claim changed from `SUPPORTED`
+  (22 September) to `MIXED`. In the live gate, MIXED is a veto.
+
+Extra questions are not side-effect-free: they can change how the evidence
+question is answered. The request is back to exactly the three questions proven
+over six live days.
+
+A valid test of Jev's independent judgement needs a **separate** request with
+the claim removed from the state. That costs extra requests against the shared
+20-per-day budget (roughly 6 stored states would settle it), so it is the user's
+decision. Letting any claim-blind answer drive the live veto would also need:
+1. enough outcome data (the first 20-day outcomes mature around 21 October);
+2. an explicit decision by the user;
+3. a circuit breaker, so a model that always says PASS cannot suppress most buys.
 
 ## Local Configuration
 
@@ -230,6 +265,8 @@ safe run statuses and is not automatically rotated.
 * `BUDGET_EXHAUSTED` or `SCAN_LIMIT_REACHED`: wait for an eligible new scan/day.
 * `RESERVED`: a request may have been interrupted. It remains charged.
 * `WORKER_STALE`: no recent saved worker heartbeat. Check the pilot task/log.
+* `LOCK_BUSY` (worker): the auto-trade Jev gate held the shared lock. Not a
+  failure; the next 15-minute run continues.
 * `REVIEW_UNAVAILABLE` or `WORKER_FAILED`: inspect local storage, lock and
   configuration. Missing/corrupt initialized storage, failed writes and clock
   rollback prevent further requests rather than resetting quota.
@@ -244,12 +281,21 @@ The pilot withholds portfolio/health explanations rather than sending them
 as technical claims. Do not change holdings, raise caps or bypass health checks
 to force an AI assessment.
 
-Locks are never reclaimed automatically based on elapsed time. For a leftover
-lock, disable only the pilot task and stop all manual pilot runs. Confirm the
-recorded process is no longer running and cannot restart, preserve a copy of the
-pilot directory, then remove only `worker.lock`. Never delete the initialized
-marker or ledger to clear quota. Restore damaged accounting from a trustworthy
-backup; absent one, leave the pilot disabled pending manual reconciliation.
+Locks are never reclaimed on elapsed time alone. Since 2026-09-29 (when the
+auto-trade gate became a second, killable lock holder), `worker.lock` is removed
+automatically only when both of these are true:
+* it is older than 10 minutes;
+* its recorded process no longer exists.
+
+That is the manual checklist below, automated. A lock whose process is still
+running (or merely asleep) is never taken over, however old. Reservations are
+fsynced before each request, so reclaiming a dead holder's lock loses no budget
+accounting. For any other stuck lock, disable only the pilot task and stop all
+manual pilot runs. Confirm the recorded process is no longer running and cannot
+restart, preserve a copy of the pilot directory, then remove only `worker.lock`.
+Never delete the initialized marker or ledger to clear quota. Restore damaged
+accounting from a trustworthy backup; absent one, leave the pilot disabled
+pending manual reconciliation.
 
 To stop the pilot, set `TYPESAFE_REVIEW_ENABLED=false`, restart the dashboard and
 disable only its task. An already-sent request cannot be recalled.

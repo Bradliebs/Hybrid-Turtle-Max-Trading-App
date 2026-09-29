@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { isReviewWeekday, reviewDay, TypesafeReviewStore, type ReviewRecord } from './typesafe-review-store';
+import { isReviewWeekday, reviewDay, STALE_LOCK_MS, TypesafeReviewStore, type ReviewRecord } from './typesafe-review-store';
 
 const directories: string[] = [];
 const now = new Date('2026-09-22T10:00:00Z');
@@ -19,6 +19,40 @@ function record(index: number): ReviewRecord {
     reviewedAt: now.toISOString(), inputHash: 'hash', claim: null, status: 'RESERVED', flags: [], answer: null, elapsedMs: 0 };
 }
 afterEach(() => directories.splice(0).forEach(directory => fs.rmSync(directory, { recursive: true, force: true })));
+
+describe('worker lock recovery', () => {
+  function writeLock(directory: string, pid: number, ageMs: number) {
+    const lockPath = path.join(directory, 'worker.lock');
+    fs.writeFileSync(lockPath, JSON.stringify({ token: 'old', pid, acquiredAt: new Date().toISOString() }));
+    const when = new Date(Date.now() - ageMs);
+    fs.utimesSync(lockPath, when, when);
+  }
+  function freshDirectory() {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'typesafe-lock-'));
+    directories.push(directory);
+    return directory;
+  }
+  const deadPid = 2_147_483_000;
+
+  it('clears an old lock left by a process that no longer exists', () => {
+    const directory = freshDirectory();
+    writeLock(directory, deadPid, STALE_LOCK_MS + 60_000);
+    const store = new TypesafeReviewStore(directory);
+    expect(() => store.acquire()).not.toThrow();
+    store.release();
+    expect(fs.existsSync(path.join(directory, 'worker.lock'))).toBe(false);
+  });
+  it('never overrides a lock held by a running process, however old', () => {
+    const directory = freshDirectory();
+    writeLock(directory, process.pid, STALE_LOCK_MS + 60_000);
+    expect(() => new TypesafeReviewStore(directory).acquire()).toThrow();
+  });
+  it('never overrides a recent lock, even if its process looks gone', () => {
+    const directory = freshDirectory();
+    writeLock(directory, deadPid, 60_000);
+    expect(() => new TypesafeReviewStore(directory).acquire()).toThrow();
+  });
+});
 
 describe('durable review budget', () => {
   it('requires explicit initialization and refuses destructive reinitialization', () => {

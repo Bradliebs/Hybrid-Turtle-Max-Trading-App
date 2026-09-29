@@ -104,6 +104,17 @@ describe('Jev entry gate', () => {
     expect(fs.existsSync(path.join(store.directory, 'worker.lock'))).toBe(false);
   });
 
+  it('reuses the stored shadow pick for a candidate already reviewed in the same scan', () => {
+    const { store } = setup(['AAA']);
+    const v1 = { version: 'jev-shadow-v1', reviewVersion: 'candidate-evidence-v2', model: TYPESAFE_MODEL, scanId: 'old', resultId: 'r0',
+      ticker: 'AAA', ownerId: 'owner', scanTime, recordedAt: scanTime, inputHash: 'h', scanPrice: 10,
+      pick: { choice: 'TAKE', confidence: 0.5, probabilities: { TAKE: 0.8, PASS: 0.2 } },
+      move20d: { score: 2, confidence: 0.4, probabilities: { 0: 0.1, 1: 0.2, 2: 0.4, 3: 0.2, 4: 0.1 } } };
+    fs.writeFileSync(store.shadowPath, `${JSON.stringify(v1)}\n{torn line\n`);
+    expect(store.findShadow('old', 'r0', 'h')?.pick.choice).toBe('TAKE');
+    expect(store.findShadow('old', 'r0', 'other-hash')).toBeNull();
+  });
+
   it('reuses an earlier answer for the same scan without paying again', async () => {
     const { deps } = setup(['AAA']);
     deps.evaluate.mockResolvedValue(respond('SUPPORTED', 0.9));

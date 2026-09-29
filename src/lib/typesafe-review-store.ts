@@ -31,6 +31,18 @@ const ledgerSchema = z.object({
 }).strict();
 export type ReviewLedger = z.infer<typeof ledgerSchema>;
 export const DEFAULT_REVIEW_DIRECTORY = path.join(process.cwd(), 'data', 'typesafe-review');
+/** A lock this old whose owning process no longer exists is left over from a crash. */
+export const STALE_LOCK_MS = 10 * 60_000;
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM means the process exists but belongs to someone else.
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
 
 export function reviewDay(now: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
@@ -60,6 +72,18 @@ export class TypesafeReviewStore {
   acquire(): void {
     if (this.lockToken) throw new Error('REVIEW_LOCK_ALREADY_HELD');
     fs.mkdirSync(this.directory, { recursive: true });
+    try {
+      this.createLock();
+    } catch (error) {
+      // A crashed or killed holder (e.g. an auto-trade session stopped at its
+      // time limit) must not block Jev forever. Only a lock that is both old
+      // and owned by a process that no longer exists is removed.
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST' || !this.removeDeadLock()) throw error;
+      this.createLock();
+    }
+  }
+
+  private createLock(): void {
     const token = randomUUID();
     const descriptor = fs.openSync(this.lockPath, 'wx');
     try {
@@ -68,6 +92,22 @@ export class TypesafeReviewStore {
       this.lockToken = token;
     } finally {
       fs.closeSync(descriptor);
+    }
+  }
+
+  private removeDeadLock(): boolean {
+    try {
+      if (Date.now() - fs.statSync(this.lockPath).mtimeMs < STALE_LOCK_MS) return false;
+      const lock = JSON.parse(fs.readFileSync(this.lockPath, 'utf8')) as { pid?: unknown; token?: unknown };
+      if (typeof lock.pid !== 'number' || !Number.isInteger(lock.pid) || isProcessAlive(lock.pid)) return false;
+      // Re-read just before deleting: if another process already reclaimed the
+      // lock (new token), leave its fresh lock alone.
+      const current = JSON.parse(fs.readFileSync(this.lockPath, 'utf8')) as { token?: unknown };
+      if (current.token !== lock.token) return false;
+      fs.unlinkSync(this.lockPath);
+      return true;
+    } catch {
+      return false;
     }
   }
 

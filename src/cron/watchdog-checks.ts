@@ -69,6 +69,25 @@ export function checkSchedulerKills(findings: readonly AuditFinding[]): string[]
   return [lines.join('\n')];
 }
 
+/**
+ * ExecutionLog phases that prove an auto-trade session reached a buy decision.
+ * A Jev veto is a deliberate "no" from a live session, not a silent death.
+ */
+export const BUY_DECISION_PHASES = ['BUY_PLACED', 'BUY_FAILED', 'JEV_VETO'] as const;
+
+/**
+ * Which A-grade rows can actually be bought. In ETF-only mode stock A-grades are
+ * skipped by design, so counting them would raise a false "zero trades" alarm.
+ */
+export function buyableAGradeWhere(scanId: string, etfOnly: boolean) {
+  return {
+    scanId,
+    grade: 'A_GRADE_BUY',
+    shares: { gt: 0 },
+    ...(etfOnly ? { stock: { sleeve: 'ETF' } } : {}),
+  };
+}
+
 export interface ZeroTradesInputs {
   /** Latest scan regime (BULLISH | NEUTRAL | BEARISH | undefined). */
   regime: string | null | undefined;

@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { checkSchedulerKills, checkZeroTradesOnBullishDay, checkNightlyHeartbeatStatus, type AuditFinding } from './watchdog-checks';
-import { checkSchedulerFindings, checkNightlyNotification, parseSchedulerAuditOutput } from './watchdog-checks';
+import { checkSchedulerFindings, checkNightlyNotification, parseSchedulerAuditOutput, BUY_DECISION_PHASES, buyableAGradeWhere } from './watchdog-checks';
+
+describe('zero-trades inputs for ETF-only and Jev', () => {
+  it('counts only ETF A-grades when ETF-only mode is on', () => {
+    expect(buyableAGradeWhere('s1', false)).toEqual({ scanId: 's1', grade: 'A_GRADE_BUY', shares: { gt: 0 } });
+    expect(buyableAGradeWhere('s1', true)).toEqual({ scanId: 's1', grade: 'A_GRADE_BUY', shares: { gt: 0 }, stock: { sleeve: 'ETF' } });
+  });
+  it('treats a Jev veto as a live buy decision, not a silent session death', () => {
+    expect(BUY_DECISION_PHASES).toEqual(expect.arrayContaining(['BUY_PLACED', 'BUY_FAILED', 'JEV_VETO']));
+    expect(BUY_DECISION_PHASES).not.toContain('JEV_SKIPPED');
+  });
+});
 
 describe('structured scheduler evidence', () => {
   it.each(['HybridTurtle Nightly', 'HybridTurtle Midday Sync', 'HybridTurtle-Trade-US'])(

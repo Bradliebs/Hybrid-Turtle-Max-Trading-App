@@ -16,34 +16,14 @@ import { createTypesafeReviewer, TypesafeReviewError, type TypesafeResponse } fr
 import { reviewDatabasePath, TypesafeReviewSource, type ReviewSnapshot } from './typesafe-review-source';
 import { reviewKey, TypesafeReviewStore, type ReviewRecord } from './typesafe-review-store';
 import { buildShadowPrediction, shadowPickSchema } from './typesafe-shadow';
+import { JEV_VETO_PREFIX, type JevGateConfig, type JevVerdict } from './auto-trade-filters';
+
+export { DEFAULT_JEV_VETO_PASS_PROBABILITY, JEV_VETO_PREFIX, readJevGateConfig } from './auto-trade-filters';
+export type { JevGateConfig, JevVerdict } from './auto-trade-filters';
 
 export const JEV_GATE_MAX_REVIEWS = 5;
-export const DEFAULT_JEV_VETO_PASS_PROBABILITY = 0.6;
-export const JEV_VETO_PREFIX = 'Jev veto:';
 const DEFAULT_LOCK_WAIT_MS = 15_000;
 const DEFAULT_DEADLINE_MS = 60_000;
-
-export interface JevGateConfig {
-  enabled: boolean;
-  hasKey: boolean;
-  passThreshold: number;
-}
-
-export function readJevGateConfig(env: Record<string, string | undefined> = process.env): JevGateConfig {
-  const raw = Number(env.JEV_VETO_PASS_PROBABILITY);
-  return {
-    enabled: env.JEV_AUTO_TRADE_GATE === 'veto' && env.TYPESAFE_REVIEW_ENABLED === 'true',
-    hasKey: Boolean(env.TYPESAFE_API_KEY?.trim()),
-    // Floor of 0.5 so a misconfigured threshold cannot turn Jev into a veto-everything switch.
-    passThreshold: Number.isFinite(raw) && raw >= 0.5 && raw <= 1 ? raw : DEFAULT_JEV_VETO_PASS_PROBABILITY,
-  };
-}
-
-export interface JevVerdict {
-  action: 'ALLOW' | 'VETO';
-  reviewed: boolean;
-  reason: string;
-}
 
 const percent = (value: number) => `${Math.round(value * 100)}%`;
 
@@ -189,7 +169,9 @@ export async function runJevEntryGate(deps: JevGateDeps): Promise<JevGateResult>
       record.reviewedAt = now().toISOString();
       record.elapsedMs = Math.max(0, now().getTime() - started);
       ledger.reviews[key] = record;
-      deps.store.save(ledger);
+      // The budget was already reserved (and fsynced) before the request, so a
+      // failed save only loses this answer's record; verdicts already decided stand.
+      try { deps.store.save(ledger); } catch { /* keep going; final save below retries */ }
       if (ledger.cooldownUntil > now().getTime()) break;
     }
     try { deps.store.save(ledger); } catch { /* verdicts stand; the ledger keeps its last good save */ }

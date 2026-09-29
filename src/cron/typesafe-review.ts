@@ -23,7 +23,14 @@ export async function runTypesafeReview(options: ReviewWorkerOptions): Promise<{
   if (!isReviewWeekday(start)) return { status: 'WEEKEND', failed: false };
   if (!options.hasKey) return { status: 'MISSING_KEY', failed: true };
   if (!options.ownerId) return { status: 'MISSING_OWNER', failed: true };
-  options.store.acquire();
+  try {
+    options.store.acquire();
+  } catch (error) {
+    // The auto-trade Jev gate shares this lock during sessions. Waiting for the
+    // next 15-minute tick is correct, so contention is not a task failure.
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return { status: 'LOCK_BUSY', failed: false };
+    throw error;
+  }
   try {
     const ledger = options.store.read();
     options.store.observe(ledger, start);
@@ -156,7 +163,7 @@ async function main(): Promise<void> {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(() => {
-    console.error('[Typesafe] WORKER_FAILED; check local ledger, lock and configuration. No automatic reset.');
+    console.error('[Typesafe] WORKER_FAILED; check local ledger, lock and configuration. A dead holder\'s lock older than 10 minutes is reclaimed automatically; nothing else is reset.');
     process.exitCode = 1;
   });
 }

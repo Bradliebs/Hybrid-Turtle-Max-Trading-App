@@ -73,7 +73,11 @@ export function createTypesafeReviewer(apiKey: string, transport: typeof fetch =
       return typesafeResponseSchema.parse(response);
     } catch (error) {
       if (error instanceof TypesafeReviewError) throw error;
-      if (error instanceof z.ZodError) throw new TypesafeReviewError('INVALID_PROVIDER_DATA');
+      // Record which field failed validation (schema path only — never provider content).
+      if (error instanceof z.ZodError) {
+        const where = error.issues[0]?.path.filter(p => typeof p === 'string' || typeof p === 'number').join('.').slice(0, 60);
+        throw new TypesafeReviewError(where ? `INVALID_PROVIDER_DATA:${where}` : 'INVALID_PROVIDER_DATA');
+      }
       throw new TypesafeReviewError('PROVIDER_UNAVAILABLE', httpStatus, retryAt !== null && Number.isFinite(retryAt) ? retryAt : null);
     }
   };
