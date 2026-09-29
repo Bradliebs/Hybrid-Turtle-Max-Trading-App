@@ -34,6 +34,9 @@ function ToggleRow(props: {
       </div>
       <button
         type="button"
+        role="switch"
+        aria-checked={props.checked}
+        aria-label={props.label}
         onClick={props.onToggle}
         disabled={props.saving}
         className={cn(

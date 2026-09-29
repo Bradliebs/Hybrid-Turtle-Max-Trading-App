@@ -18,7 +18,10 @@ type Decision =
   | 'PREPARE_PLAN'
   | 'BUY_ALLOWED'
   | 'BUY_BLOCKED'
-  | 'EXIT_REVIEW';
+  | 'EXIT_REVIEW'
+  | 'SYSTEM_BLOCKED'
+  | 'CAPITAL_PRESERVATION_ACTIVE'
+  | 'RESEARCH_ONLY';
 
 interface Blocker {
   code: string;
@@ -70,6 +73,27 @@ function getDecisionStyle(decision: Decision): {
 } {
   const iconClass = 'w-6 h-6';
   switch (decision) {
+    case 'SYSTEM_BLOCKED':
+      return {
+        border: 'border-l-red-600',
+        icon: <XCircle className={cn(iconClass, 'text-red-400')} />,
+        badge: 'SYSTEM BLOCKED',
+        badgeColor: 'bg-red-500/20 text-red-400 border-red-500/40',
+      };
+    case 'CAPITAL_PRESERVATION_ACTIVE':
+      return {
+        border: 'border-l-amber-500',
+        icon: <ShieldCheck className={cn(iconClass, 'text-amber-400')} />,
+        badge: 'PRESERVE',
+        badgeColor: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
+      };
+    case 'RESEARCH_ONLY':
+      return {
+        border: 'border-l-violet-500',
+        icon: <Wrench className={cn(iconClass, 'text-violet-400')} />,
+        badge: 'RESEARCH',
+        badgeColor: 'bg-violet-500/20 text-violet-300 border-violet-500/40',
+      };
     case 'BUY_ALLOWED':
       return {
         border: 'border-l-emerald-500',
@@ -125,6 +149,14 @@ function getDecisionStyle(decision: Decision): {
         icon: <CheckCircle2 className={cn(iconClass, 'text-gray-400')} />,
         badge: 'CLEAR',
         badgeColor: 'bg-gray-500/20 text-gray-400 border-gray-500/40',
+      };
+    default:
+      // A decision the API added but this card doesn't know yet must never crash the dashboard.
+      return {
+        border: 'border-l-gray-600',
+        icon: <AlertTriangle className={cn(iconClass, 'text-gray-400')} />,
+        badge: String(decision).replace(/_/g, ' '),
+        badgeColor: 'bg-gray-500/20 text-gray-300 border-gray-500/40',
       };
   }
 }
