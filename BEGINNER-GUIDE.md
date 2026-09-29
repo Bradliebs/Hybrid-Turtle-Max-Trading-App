@@ -32,7 +32,7 @@ HybridTurtle looks for shares and funds that are **already rising strongly** and
 In practice it does five jobs for you:
 
 1. **Checks the market mood.** New buys are only allowed when the overall market is rising.
-2. **Scans about 1,000 shares and funds** for breakouts.
+2. **Scans more than 1,000 shares and funds** for breakouts.
 3. **Grades each idea.** Only the strongest become A-grade buys.
 4. **Works out how much to buy**, so that one losing trade costs only a small, fixed slice of your account.
 5. **Protects each trade with a stop**, and only ever moves that stop up as the price rises, never down.
@@ -92,10 +92,13 @@ You need a **Windows 10 or 11** PC and an internet connection.
 | Problem | What to do |
 |---|---|
 | "Node.js not found" or "unsupported version" | Install Node.js **20 or 22 LTS** from nodejs.org, then run `install.bat` again. |
-| "Port 3000 already in use" | The dashboard is already running. Look for another black window, or restart your PC and try again. |
+| "Port 3000 already in use" | `start.bat` normally closes an old dashboard on port 3000 for you. If another program uses that port (or a Docker copy of the app is running), close it or restart your PC, then start again. |
+| A warning box when the black window starts, mentioning `.env` | Your `.env` file still has example values. Follow the fix it prints. The next row covers the most common one. |
 | **"Unauthorised"** or **"Too many requests"** when you click **Run Full Scan** or save settings | The app is asking for a login, which a single-user PC doesn't need. Open the `.env` file in the HybridTurtle folder with Notepad and make sure the **only** `DISABLE_API_AUTH` line reads `DISABLE_API_AUTH=true`. When saving, set "Save as type" to **All files** so Notepad doesn't create `.env.txt`. Delete any `.env.local` or `.env.production` files if you didn't create them on purpose. Then close the black window and start the app again. |
 | Browser doesn't open | Wait a minute, then go to <http://localhost:3000/dashboard> yourself. |
 | You got a newer version of the app | Double-click **`update.bat`**. |
+
+> **Using Docker instead?** Docker suits Path A (stock ideas) and Path B with manual syncing. The scheduled jobs don't run in a container: no automatic Trading 212 sync, nightly stop updates or auto-trading. For Path C, use the Windows install above. Docker setup steps are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ---
 
@@ -125,7 +128,9 @@ Telegram sends trade confirmations, daily summaries and warnings to your phone.
 
 1. In the Telegram app, search for **@BotFather**, send `/newbot` and follow the prompts. It gives you a **Bot Token**.
 2. Send any message to your new bot. Then search for **@userinfobot**, which replies with your **Chat ID**.
-3. In **Settings → Notifications**, paste the **Bot Token** and **Chat ID**, click **Send Test Message**, and check that it arrives on your phone. Then save.
+3. In **Settings → Notifications**, paste the **Bot Token** and **Chat ID**, click **Send Test Message**, and check that it arrives on your phone. Then click **Save**.
+
+> If the boxes are greyed out and say **"Set via environment variable"**, your `.env` file already contains `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` lines, and those take priority. If they're example placeholders (`your-telegram-bot-token`), delete both lines from `.env` and restart the app. Then set Telegram up here.
 
 ### 5.3 Leave the rest alone for now
 
@@ -135,7 +140,11 @@ Telegram sends trade confirmations, daily summaries and warnings to your phone.
 
 ## 6. Reading the Dashboard
 
-The **Dashboard** is your home screen. Start every visit with the **Today** card at the top: it tells you in one word what to do.
+The **Dashboard** is your home screen.
+
+**First visit:** a **Getting Started** checklist sits at the top. Click the arrow to see each step. It lists connecting Trading 212 as "required", but that only applies to Paths B and C. If you're following Path A (stock ideas only), click the **×** to dismiss it once your account settings are saved.
+
+**Every visit:** start with the **action card** below it. It shows a coloured badge that tells you in one word what to do, then a one-line headline and a button.
 
 | Badge | What it means | What to do |
 |---|---|---|
@@ -147,9 +156,10 @@ The **Dashboard** is your home screen. Start every visit with the **Today** card
 | **MANAGE** | You have open trades to keep an eye on. | Click **View Positions**. |
 | **EXIT** | A trade isn't going anywhere and is flagged for review. | Click **View Positions** and decide whether to sell. |
 | **BLOCKED** | Buying isn't allowed right now. The card shows the main reason, often the market regime. | Nothing. Being told "no" is the system protecting you. |
-| **SYSTEM BLOCKED** | Something needs fixing before any trading, e.g. stale data or a health warning. | Click **Go to Settings**, or see section 12. |
+| **SYSTEM BLOCKED** | A safety switch is on. **Disable all submissions** blocks every order; **Disable automated submissions only** blocks automatic orders but still lets you click Buy yourself. | If you paused on purpose, nothing. Otherwise click **Go to Settings** and turn the switch off. |
+| **PRESERVE** / **RESEARCH** | The app is in Capital Preservation mode (manage and exit only) or Research mode (look, no trading). | Manage existing trades. These modes were set on purpose. |
 
-Below the badge you'll see quick numbers: **Positions**, **Open Risk**, **Risk Budget**, **READY**, **Health**, **Scan Age**, **Auto-Trade** and **T212**. Green is good; red needs attention.
+Click **System Details** at the bottom of the card for quick numbers: **Positions**, **Open Risk**, **Risk Budget**, **READY**, **Health**, **Scan Age**, **Auto-Trade** and **T212**. Anything shown in amber needs attention.
 
 > **Tip:** The top menu has many pages. Beginners only need **Dashboard**, **Portfolio**, **Scan**, **Risk**, **Trade Log** and **Settings**. The **Analysis**, **Performance** and **System** menus are for later.
 
@@ -161,11 +171,11 @@ You use HybridTurtle to find and size ideas, then trade at any broker you like (
 
 ### Every trading day (about 10 minutes)
 
-1. **Open the app** and check the **Today** card. If it says **BLOCKED** because of the market regime, there's nothing to buy today. That's normal.
+1. **Open the app** and check the badge on the Dashboard's action card. If it says **BLOCKED** because of the market regime, there's nothing to buy today. That's normal.
 2. **Go to Scan** and click **Run Full Scan**. It takes a few minutes.
 3. **Look at the "TRIGGERED — READY TO BUY" section** first. These ideas have broken out. **READY** and **WATCH** ideas below it haven't yet: treat them as a watchlist.
 4. **Check the scores.** Open the **Scores** tab and keep only ideas with **NCS 70 or more**, **FWS 30 or less** and **BQS 55 or more**. These are the same score limits the automatic buyer uses (section 10.2). Skip anything showing **WAIT_PULLBACK**: it has already run too far.
-5. **Work out how many shares to buy.** For each idea you keep, note the **Entry** and **Stop** prices from the scan table. Type them into the **Position Sizer** on the Scan page. It works out the number of shares from your account size and risk profile, so a loss at the stop costs only your chosen small slice.
+5. **Work out how many shares to buy.** For each idea you keep, note the **Entry** and **Stop** prices from the scan table. Type them into the **Position Sizing Calculator** on the Scan page. It gives you **Shares to Buy**, worked out from your account size and risk profile, so a loss at the stop costs only your chosen small slice.
 6. **At your own broker**, buy that number of shares near the entry price, and **immediately place a stop-loss order** at the stop price.
 
 ### Managing your trades
@@ -210,11 +220,10 @@ This also installs the automatic-trading jobs used in Path C, but they **do noth
 
 ### 8.4 Buying
 
-1. When the **Today** card says **BUY**, click **Go to Positions**.
+1. When the Dashboard's action card says **BUY**, click **Go to Positions**.
 2. The **Ready to Buy** panel lists ideas whose price has reached its trigger, best scores first, with suggested shares, value, risk and stop. Prefer ideas that meet the score limits in section 10.2.
-   - A **Buy** button means you can go ahead.
-   - **Buy (Advisory)** means it's a mid-week entry; only proceed if you'd already planned it.
-   - **Blocked** means a rule is saying no. Hover over it to see why.
+   - A **Buy** button means you can go ahead (weekdays).
+   - **Blocked** means a rule is saying no, or it's the weekend. Hover over it to see why.
 3. Click **Buy**, read the confirmation screen, then choose:
    - **Execute on T212**: places the buy **and** the protective stop on Trading 212.
    - **Record Only (manual buy)**: records a trade you placed yourself in the Trading 212 app.
@@ -225,7 +234,7 @@ This also installs the automatic-trading jobs used in Path C, but they **do noth
 
 ### 8.5 Managing trades
 
-- Check the **Today** card each day. **STOPS** means stops are due to move up: click **Review Stops**.
+- Check the Dashboard's action card each day. **STOPS** means stops are due to move up: click **Review Stops**.
 - **Portfolio** shows each trade's price, stop, **R** and profit or loss.
 - Don't move stops down in the Trading 212 app. The app will only ever raise them.
 
@@ -249,7 +258,7 @@ Tick all of these first:
 
 1. Go to **Settings → Safety Controls**.
 2. Turn on **Enable auto-trading**.
-3. **Optional:** turn on **ETF-only auto-trading** to buy only funds (ETFs), not individual shares. It's a good, calmer option while you build confidence. Shares are still scanned and graded; skipped shares show as "ETF-only mode" in the Telegram summary.
+3. **Optional:** turn on **ETF-only auto-trading** to buy only funds (ETFs), not individual shares. Shares are still scanned and graded; skipped shares show as "ETF-only mode" in the Telegram summary. Expect far fewer buys: there are about 58 ETFs against more than 1,000 shares, and only 9 trade in London, so the UK sessions rarely find one. ETFs aren't automatically safer, either: the list includes **leveraged and inverse** funds (such as SQQQ and SPXS) that move 3× the market or against it.
 
 ### 9.3 When it runs (UK time, Monday–Friday)
 
@@ -276,12 +285,12 @@ The app only buys when **all** of these are true. If any fails, it skips, and th
 5. The system health check isn't **RED**.
 6. The idea is **A-grade** and the price has actually reached its trigger.
 7. A fresh live price, checked seconds before buying, still confirms the breakout and isn't too far past it.
-8. There are no company earnings results in the next few days (warning or deferral).
+8. Company earnings results in the next few days are **flagged** in a Telegram warning. They only block the buy if earnings deferral has been configured (`EARNINGS_DEFERRAL_DAYS` in `.env`).
 9. Your risk profile's limits aren't exceeded: number of trades, total risk and concentration.
 10. **Optional:** the **Jev** AI reviewer doesn't veto it (see below).
 11. The session hasn't already used its 2 buys.
 
-> **About Jev.** Jev is an optional AI reviewer. It can **block** a buy it thinks is weak, but it can **never add** a buy or change sizes or stops. If Jev is unavailable, the normal rules decide. It's only active if it has been configured.
+> **About Jev.** Jev is an optional AI reviewer that double-checks each A-grade buy just before it's placed. It can **block** a buy, but it can **never add** one or change sizes or stops. If Jev is unavailable, the normal rules decide. **Honest status:** so far Jev has agreed with every buy it was shown, so treat it as a sanity check, not a second opinion. It only runs if it has been configured.
 
 ### 9.5 Pausing or stopping
 
@@ -366,7 +375,7 @@ To stop one bad week hurting too much, the app also limits:
 | Day | What to do |
 |---|---|
 | **Sunday: plan** | Open the app. Run a scan and look at the triggered and READY ideas for the week. Read the weekly digest if you use Telegram. |
-| **Monday–Friday: act** | Check the **Today** card. Buy only triggered, well-scored ideas when it says **BUY**, and review stops when it says **STOPS**. (Path C does this for you.) |
+| **Monday–Friday: act** | Check the Dashboard's action card. Buy only triggered, well-scored ideas when it says **BUY**, and review stops when it says **STOPS**. (Path C does this for you.) |
 | **Saturday: maintain** | Record any closed trades (Path A). Glance at **Trade Log** and **Risk**. No trading. |
 
 ---
@@ -374,10 +383,10 @@ To stop one bad week hurting too much, the app also limits:
 ## 12. Troubleshooting and common questions
 
 **"Nothing was bought today. Is it broken?"**
-Probably not. Most days have no breakouts that pass every rule, and many days the market isn't **BULLISH**. Check the **Today** card or the Telegram summary for the reason. A quiet system is often a safe system.
+Probably not. Most days have no breakouts that pass every rule, and many days the market isn't **BULLISH**. Check the Dashboard's action card or the Telegram summary for the reason. A quiet system is often a safe system.
 
-**The Today card says SYSTEM BLOCKED.**
-Something needs fixing before trading, such as stale price data or a health warning. Open **Risk** and **Alerts** to see what's flagged. Often, running a fresh scan or syncing Trading 212 clears it.
+**The action card says SYSTEM BLOCKED.**
+A safety switch is on in **Settings → Safety Controls**. **Disable all submissions** stops every order; **Disable automated submissions only** stops automatic orders but leaves your own Buy buttons working. If you didn't turn it on deliberately, turn it off there. The card also lists any health problems; open **Risk** and **Alerts** to see them.
 
 **The Buy button says Blocked.**
 A rule is saying no, such as too many open trades, too much risk, or a stale scan. Hover over it for the reason. The fix is usually to wait, not to change your risk profile.

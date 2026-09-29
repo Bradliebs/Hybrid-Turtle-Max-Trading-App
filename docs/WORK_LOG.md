@@ -1114,6 +1114,7 @@ A fresh saved health check reads YELLOW (position size, cluster and sector
 warnings remain). YELLOW does not block auto-trade, so scheduled sessions can
 resume buying from the next UK session, still subject to every risk gate and the
 two-attempt session cap.
+
 ## 2026-09-23 Jev shadow schedule activated
 
 The user asked to start using Jev alongside auto-trades. The user was
@@ -1165,3 +1166,80 @@ without a .L suffix (for example EIMI, SGLN, CNDX) route to US sessions. That
 is an existing routing quirk, noted for follow-up and not changed. The full
 suite passed (2,291 tests), and an API toggle round-trip left the other
 switches unchanged.
+
+## 2026-09-23 Dependency security fix and Linux CI repair (recorded 2026-09-29)
+
+CI had been failing at `npm audit --audit-level=high`: 18 advisories, including
+Next.js remote-code-execution issues on Windows-hosted servers. Upgraded
+`next` to 15.5.26 and overrode `@auth/core` (0.41.3; never loaded by next-auth
+at runtime) and `deepmerge-ts` (8.0.2; Prisma CLI validated). `npm audit fix
+--force` was rejected because it would downgrade Prisma. Once the audit passed,
+five scheduler-audit tests failed on the Linux runner because Windows task paths
+were joined with `/`. They now use `path.win32.join`. CI is green again.
+
+## 2026-09-26 Beginner guide, desktop auth warning and Docker repair (recorded 2026-09-29)
+
+Added `BEGINNER-GUIDE.md` with three paths: ideas only, Trading 212 with manual
+buys, and fully automatic. A new user hit "Unauthorised", then "Too many
+requests": their `.env` came from `.env.example`, where `DISABLE_API_AUTH` is
+false. The rate limiter only runs with auth on. `start.bat` now warns about
+this at startup.
+
+The same user ran Docker, and the Docker path was broken in several ways:
+- The image could not build, because `npm ci` ran `prisma generate` before the
+  schema was copied in.
+- `.env` and the live database were baked into the image.
+- The app bound to 127.0.0.1 inside the container and was published on every
+  interface.
+- `BROKER_ADAPTER` defaulted to `mock`.
+- A fresh container had no stock universe.
+
+The fix adds `scripts/docker-start.mjs`, a loopback-only port, forced desktop
+mode and first-run seeding. It was verified end to end as a new user: settings
+saved, a full scan of 1,362 tickers ran, and the port could not be reached from
+the LAN. Scheduled jobs remain Windows-only.
+
+## 2026-09-29 Two-model review of this work (with Sonnet 5.5)
+
+The user asked for a completeness review, cross-checked by Sonnet 5.5, with
+every finding fixed. Findings, in priority order:
+
+1. **Dashboard crash when paused.** The whole Dashboard crashed whenever a kill
+   switch was on, or in Capital Preservation or Research mode. The Today card
+   had no style for three decisions the API returns. Reproduced in the browser
+   and fixed, with a safe default for unknown decisions.
+2. **Jev veto effectively inert.** Six days of live data showed 6 reviewed
+   buys, all allowed, and 12 answers, all `SUPPORTED`. `pick` tracked the
+   scanner's own claim exactly. A claim-blind fourth question was tried and
+   reverted the same day, because it did not stay in shadow mode:
+   - Round 2 (Sonnet) asked for a live check first. The supervised
+     `--synthetic` request invalidated every shadow answer.
+   - It also flipped a synthetic evidence answer from SUPPORTED to MIXED, and
+     MIXED is a live veto.
+
+   The request is back to the proven three questions. The docs now state the
+   evidence honestly. A proper claim-free test needs a separate request, which
+   is a budget decision for the user.
+3. **Native module on every auto-trade start.** Auto-trade loaded the native
+   `better-sqlite3` module even with the veto off. The gate now loads lazily
+   and fails open.
+4. **Remaining fixes:**
+   - Watchdog "zero trades" false alarms under ETF-only mode or vetoes.
+   - The worker failed on lock contention and could be blocked by a dead holder.
+     The lock is now reclaimed only when it is older than 10 minutes and its
+     process no longer exists.
+   - 12 beginner-guide inaccuracies, checked against the live UI.
+   - Placeholder secret and Telegram values from `.env.example` are now caught
+     at startup.
+   - Warning against sharing a folder between Docker and the Windows install.
+   - Auth-on mode could not scan, because progress polling was rate-limited.
+     Reads are no longer limited.
+   - An unguarded ledger save could discard vetoes already decided.
+   - New `JEV_SKIPPED` audit phase.
+   - Behavioural tests for both filters.
+   - Accessible names and on/off state for the safety switches.
+   - Validation-path diagnostics for `INVALID_PROVIDER_DATA`.
+   - Misleading requirement text in `register-auto-trade.bat`.
+
+Full suite 2,312 passed. Typecheck and lint are clean. The rebuilt dashboard
+was re-tested in the browser.
