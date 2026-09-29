@@ -60,7 +60,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Rate limiting for expensive endpoints
-  const category = getRateLimitCategory(pathname);
+  const category = getRateLimitCategory(pathname, request.method);
   if (category) {
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
     const rateLimitKey = `${category}:${ip}`;

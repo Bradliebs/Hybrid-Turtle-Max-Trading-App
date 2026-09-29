@@ -74,13 +74,16 @@ export const RATE_LIMITS = {
 } as const;
 
 /**
- * Classify a pathname into a rate limit category.
- * Returns null for paths that don't need rate limiting.
+ * Classify a request into a rate limit category.
+ * Returns null for requests that don't need rate limiting.
+ * Scan reads (GET: cached results, progress polling, scores) are not limited —
+ * the Scan page polls progress every 0.8s during a run, which a 3/min budget
+ * would block. Only scan runs and other writes count as heavy.
  */
-export function getRateLimitCategory(pathname: string): keyof typeof RATE_LIMITS | null {
+export function getRateLimitCategory(pathname: string, method?: string): keyof typeof RATE_LIMITS | null {
   if (pathname.startsWith('/api/positions/execute')) return 'execute';
   if (pathname.startsWith('/api/nightly')) return 'heavy';
-  if (pathname.startsWith('/api/scan') && !pathname.includes('cache')) return 'heavy';
+  if (pathname.startsWith('/api/scan') && !pathname.includes('cache') && method?.toUpperCase() !== 'GET') return 'heavy';
   if (pathname.startsWith('/api/workflow')) return 'heavy';
   if (pathname.startsWith('/api/auth') && pathname.includes('register')) return 'register';
   return null;

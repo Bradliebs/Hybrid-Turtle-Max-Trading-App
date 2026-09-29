@@ -38,6 +38,19 @@ describe('rate-limit', () => {
       expect(getRateLimitCategory('/api/scan/cache')).toBeNull();
     });
 
+    it('limits scan runs but not scan reads such as progress polling', () => {
+      expect(getRateLimitCategory('/api/scan', 'POST')).toBe('heavy');
+      expect(getRateLimitCategory('/api/scan/live-prices', 'POST')).toBe('heavy');
+      expect(getRateLimitCategory('/api/scan/progress', 'GET')).toBeNull();
+      expect(getRateLimitCategory('/api/scan', 'get')).toBeNull();
+      expect(getRateLimitCategory('/api/scan/scores', 'GET')).toBeNull();
+    });
+
+    it('keeps execute and nightly limits regardless of method', () => {
+      expect(getRateLimitCategory('/api/positions/execute', 'GET')).toBe('execute');
+      expect(getRateLimitCategory('/api/nightly', 'GET')).toBe('heavy');
+    });
+
     it('returns null for normal endpoints', () => {
       expect(getRateLimitCategory('/api/settings')).toBeNull();
       expect(getRateLimitCategory('/api/portfolio')).toBeNull();
