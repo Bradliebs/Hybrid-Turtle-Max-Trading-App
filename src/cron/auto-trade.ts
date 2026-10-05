@@ -64,7 +64,7 @@ import { assertSubmissionAllowed, SafetyControlError, isAutoTradingEnabled, getK
 import { getBatchPrices, getTechnicalData, normalizeBatchPricesToGBP, getFXRate, getMarketRegime } from '@/lib/market-data';
 import { fetchT212LivePrices } from '@/lib/position-sync';
 import { classifyCandidate, DEFAULT_GRADE_THRESHOLDS, type GradingContext, type CandidateGrade, type GradeThresholds } from '@/lib/candidate-grade';
-import { getLatestScoresByTicker } from '@/lib/score-lookup';
+import { getLatestScoresByTicker, isScoreStale } from '@/lib/score-lookup';
 import { NO_CHASE_ATR_BOUND } from '@/lib/entry-quality-engine';
 import { RISK_PROFILES, type RiskProfileType, type Sleeve, type MarketRegime, type TechnicalData, OPERATING_MODES, type OperatingMode } from '@/types';
 import { decryptField } from '@/lib/crypto';
@@ -75,6 +75,8 @@ import { groupSkipsByCategory } from '@/lib/skip-reason-category';
 import { acquireAutoTradeLock, releaseAutoTradeLock, AutoTradeLockContentionError, type LockHolder } from '@/lib/auto-trade-lock';
 import { getHistoricalFill, recoverTimedOutBuy } from '@/lib/buy-timeout-recovery';
 import { readJevGateConfig, partitionEtfOnly, partitionJevVerdicts, jevLogPhase, type JevVerdict } from '@/lib/auto-trade-filters';
+import { brokerListingMismatch, isUsPriceListing } from '@/lib/listing-identity';
+import { toYahooTicker } from '@/lib/ticker-maps';
 
 // ── Configuration ────────────────────────────────────────────
 
@@ -330,8 +332,9 @@ export function isStockForSession(ticker: string, sleeve: string, session: Sessi
 
   // UK sessions: only .L suffix stocks (LSE)
   if (session === 'uk' || session === 'uk-mid') return ticker.endsWith('.L');
-  // US sessions: non-.L stocks
-  return !ticker.endsWith('.L');
+  // US sessions: US listings only (no exchange suffix). EU/Australian listings
+  // (.AS, .PA, .DE, .AX …) trade at other hours and have no session of their own.
+  return isUsPriceListing(ticker);
 }
 
 // ETF-only helpers now live in the dependency-free auto-trade-filters module.
@@ -1390,7 +1393,7 @@ async function runAutoTrade(session: Session) {
   const gradedCandidates = sessionCandidates.map(c => {
     const scores = scoresByTicker.get(c.ticker);
     const candidateCtx: GradingContext = scores
-      ? { ...gradingCtx, ncs: scores.ncs, fws: scores.fws, bqs: scores.bqs }
+      ? { ...gradingCtx, ncs: scores.ncs, fws: scores.fws, bqs: scores.bqs, scoresStale: isScoreStale(scores) }
       : gradingCtx;
     return {
       ...c,
@@ -1731,6 +1734,14 @@ async function runAutoTrade(session: Session) {
 
     if (!stock?.t212Ticker) {
       skipped.push({ ticker: candidate.ticker, reason: 'No T212 ticker mapped' });
+      continue;
+    }
+
+    // Prices, sizing and the stop come from the market-data listing; refuse to
+    // buy a different broker listing (stop would be placed in the wrong units).
+    const listingMismatch = brokerListingMismatch(toYahooTicker(candidate.ticker), stock.t212Ticker);
+    if (listingMismatch) {
+      skipped.push({ ticker: candidate.ticker, reason: listingMismatch });
       continue;
     }
 

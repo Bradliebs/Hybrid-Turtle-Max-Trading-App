@@ -47,7 +47,7 @@ export interface CandidateReviewInput {
 }
 
 const numericText = '-?\\d+(?:\\.\\d+)?';
-const weakPoint = `(?:READY \\u2014 within 2% of trigger but breakout not yet confirmed|WATCH \\u2014 not yet ready|NCS ${numericText} < ${numericText}|FWS ${numericText} > ${numericText}|BQS ${numericText} < ${numericText}|Vol ratio ${numericText} < ${numericText}|RS ${numericText}% < ${numericText}%|ATR spiking \\u2014 volatility elevated)`;
+const weakPoint = `(?:READY \\u2014 within 2% of trigger but breakout not yet confirmed|WATCH \\u2014 not yet ready|NCS ${numericText} < ${numericText}|FWS ${numericText} > ${numericText}|BQS ${numericText} < ${numericText}|Vol ratio ${numericText} < ${numericText}|RS ${numericText}% < ${numericText}%|RS ${numericText} < ${numericText} \\(50 = level with SPY\\)|ATR spiking \\u2014 volatility elevated)`;
 const watchReason = new RegExp(`^Passes filters but not A-grade\\. (?:${weakPoint}(?:\\. ${weakPoint})*|Near threshold \\u2014 watch for improvement\\.)$`);
 const buyReason = new RegExp(`^Trigger met \\u2014 price at or above entry\\. All filters pass, scores strong \\(NCS ${numericText}, BQS ${numericText}, FWS ${numericText}\\), volume confirmed\\.$`);
 

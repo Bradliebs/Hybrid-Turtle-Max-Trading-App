@@ -541,7 +541,7 @@ The weekday execution gates and weekend no-entry blocks are **behavioural guardr
 | INITIAL | Entry | Entry − InitialRisk |
 | BREAKEVEN | ≥ 1.5R | Entry price |
 | LOCK_08R | ≥ 2.5R | Entry + 0.5 × InitialRisk |
-| LOCK_1R_TRAIL | ≥ 3.0R | max(Entry + 1R, Close − 2×ATR) |
+| LOCK_1R_TRAIL | ≥ 3.0R | max(Entry + 1R, Close − 1.5×ATR) |
 
 **Stops ratchet up only. A function that could lower a stop is a bug, not a feature.**
 

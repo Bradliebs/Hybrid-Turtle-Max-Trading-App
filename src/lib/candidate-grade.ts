@@ -3,7 +3,7 @@
  * Consumed by: scan API route, auto-trade.ts, TodayDirectiveCard, CandidateTable
  * Consumes: @/types (ScanCandidate, CandidateStatus)
  * Risk-sensitive: NO — classification only, does not execute trades or bypass gates
- * Last modified: 2026-04-26
+ * Last modified: 2026-10-05
  * Notes: Pure function — no DB, no side effects. Takes a candidate + context, returns a grade.
  *        Auto-trade uses grade to prefer A_GRADE_BUY and skip BLOCKED/C_GRADE.
  *        Thresholds are configurable via GRADE_THRESHOLDS export.
@@ -50,7 +50,11 @@ export interface GradeThresholds {
   minBQS: number;
   /** Minimum volume ratio for A-grade (default 0.8) */
   minVolumeRatio: number;
-  /** Minimum relative strength for A-grade (default 0) */
+  /**
+   * Minimum relative-strength score for A-grade (default 50). The scanner's RS is a
+   * 0–100 score where 50 means level with SPY over 20 sessions (market-data.ts), so
+   * 50 = "not lagging the market". It was 0, which every score passes.
+   */
   minRelativeStrength: number;
 }
 
@@ -59,7 +63,7 @@ export const DEFAULT_GRADE_THRESHOLDS: GradeThresholds = {
   maxFWS: 30,
   minBQS: 55,
   minVolumeRatio: 0.8,
-  minRelativeStrength: 0,
+  minRelativeStrength: 50,
 };
 
 // ── Context required for grading ────────────────────────────
@@ -71,6 +75,8 @@ export interface GradingContext {
   ncs?: number | null;
   bqs?: number | null;
   fws?: number | null;
+  /** True when the scores are older than the freshness limit (a missed nightly). Blocks A-grade. */
+  scoresStale?: boolean;
 }
 
 // ── Classification logic ────────────────────────────────────
@@ -239,6 +245,12 @@ export function classifyCandidate(
   const ncsOk = ncs >= thresholds.minNCS;
   const fwsOk = fws <= thresholds.maxFWS;
   const bqsOk = bqs >= thresholds.minBQS;
+  const scoresFresh = context.scoresStale !== true;
+  checks.push({
+    name: 'scoreFreshness',
+    passed: scoresFresh,
+    detail: scoresFresh ? 'Scores current' : 'Scores older than 36h (missed nightly) — not trusted for a buy',
+  });
   checks.push({
     name: 'ncs',
     passed: ncsOk,
@@ -264,16 +276,28 @@ export function classifyCandidate(
     detail: `Vol ratio ${volRatio.toFixed(2)} ${volOk ? '≥' : '<'} ${thresholds.minVolumeRatio}`,
   });
 
-  // 12. Relative strength
+  // 12. Relative strength (0–100 score; 50 = level with SPY)
   const rs = candidate.technicals.relativeStrength;
   const rsOk = rs >= thresholds.minRelativeStrength;
   checks.push({
     name: 'relativeStrength',
     passed: rsOk,
-    detail: `RS ${rs.toFixed(1)}% ${rsOk ? '≥' : '<'} ${thresholds.minRelativeStrength}%`,
+    detail: `RS ${rs.toFixed(1)} ${rsOk ? '≥' : '<'} ${thresholds.minRelativeStrength} (50 = level with SPY)`,
   });
 
-  // 13. ATR spike (soft check — doesn't block, but demotes from A to B)
+  // 13. Earnings soon (confirmed in 3–5 days, or an unconfirmed date within 2 days):
+  // the scanner demotes READY to WATCH, but the A-grade rule checks the trigger,
+  // not READY, so the demotion was bypassed. Binary event risk: watch, don't buy.
+  const earningsSoon = candidate.earningsInfo?.action === 'DEMOTE_WATCH';
+  checks.push({
+    name: 'earningsSoon',
+    passed: !earningsSoon,
+    detail: earningsSoon
+      ? `Earnings in ${candidate.earningsInfo?.daysUntilEarnings ?? '3–5'} days — watch only`
+      : 'No earnings within 5 days',
+  });
+
+  // 14. ATR spike (soft check — doesn't block, but demotes from A to B)
   const atrSpiking = candidate.filterResults.atrSpiking === true;
   checks.push({
     name: 'atrSpike',
@@ -284,7 +308,7 @@ export function classifyCandidate(
   // ── Grade decision ──
 
   const aGradeChecks = passesAllFilters && isTriggerMet &&
-    ncsOk && fwsOk && bqsOk && volOk && rsOk && !atrSpiking;
+    ncsOk && fwsOk && bqsOk && scoresFresh && volOk && rsOk && !earningsSoon && !atrSpiking;
 
   if (aGradeChecks) {
     return {

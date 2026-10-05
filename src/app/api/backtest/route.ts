@@ -17,6 +17,7 @@ import {
   type SnapshotRow,
 } from '@/lib/dual-score';
 import { calcBPSFromSnapshot, computeRsPercentiles } from '@/lib/breakout-probability';
+import { ATR_TRAILING_MULTIPLIER } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -137,8 +138,8 @@ function simulateStopLadder(
 
     // Ratchet stop up based on R-multiple reached (monotonic — never decreases)
     if (rMultiple >= 3.0) {
-      // LOCK_1R_TRAIL: max(entry + 1R, close - 2×ATR)
-      const trailStop = Math.max(entryPrice + riskPerShare, snap.close - 2 * snap.atr14);
+      // LOCK_1R_TRAIL: max(entry + 1R, close - ATR_TRAILING_MULTIPLIER × ATR), as in live stop-manager
+      const trailStop = Math.max(entryPrice + riskPerShare, snap.close - ATR_TRAILING_MULTIPLIER * snap.atr14);
       currentStop = Math.max(currentStop, trailStop);
     } else if (rMultiple >= 2.5) {
       // LOCK_08R: entry + 0.5R

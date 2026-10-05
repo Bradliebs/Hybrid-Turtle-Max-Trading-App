@@ -35,7 +35,7 @@ function makeCandidate(overrides: Partial<ScanCandidate> = {}): ScanCandidate {
       atrPercent: 1.7,
       twentyDayHigh: 182,
       efficiency: 55,
-      relativeStrength: 8,
+      relativeStrength: 62,
       volumeRatio: 1.3,
       failedBreakoutAt: null,
     },
@@ -167,6 +167,46 @@ describe('candidate-grade: B_GRADE_WATCH', () => {
       BULLISH_GREEN,
     );
     expect(result.grade).toBe('B_GRADE_WATCH');
+  });
+
+  it('relative strength below 50 (lagging SPY) → B_GRADE_WATCH; 50 (level, or the missing-data default) passes', () => {
+    const lagging = classifyCandidate(
+      makeCandidate({ technicals: { ...makeCandidate().technicals, relativeStrength: 49.9 } }),
+      BULLISH_GREEN,
+    );
+    expect(lagging.grade).toBe('B_GRADE_WATCH');
+    expect(lagging.reason).toContain('RS 49.9 < 50 (50 = level with SPY)');
+    const level = classifyCandidate(
+      makeCandidate({ technicals: { ...makeCandidate().technicals, relativeStrength: 50 } }),
+      BULLISH_GREEN,
+    );
+    expect(level.grade).toBe('A_GRADE_BUY');
+  });
+
+  it('stale scores (missed nightly) → B_GRADE_WATCH even when the numbers pass', () => {
+    const result = classifyCandidate(makeCandidate(), { ...BULLISH_GREEN, scoresStale: true });
+    expect(result.grade).toBe('B_GRADE_WATCH');
+    expect(result.checks.find(c => c.name === 'scoreFreshness')?.passed).toBe(false);
+  });
+
+  it('earnings in 3–5 days (scanner DEMOTE_WATCH) → B_GRADE_WATCH even after the trigger is met', () => {
+    const result = classifyCandidate(
+      makeCandidate({
+        status: 'WATCH',
+        earningsInfo: { daysUntilEarnings: 4, nextEarningsDate: '2026-10-09', confidence: 'HIGH', action: 'DEMOTE_WATCH', reason: 'earnings in 4 days' },
+      }),
+      BULLISH_GREEN,
+    );
+    expect(result.grade).toBe('B_GRADE_WATCH');
+    expect(result.reason).toContain('Earnings in 4 days');
+  });
+
+  it('low-efficiency demotion to WATCH stays advisory: a triggered candidate can still be A-grade', () => {
+    const result = classifyCandidate(
+      makeCandidate({ status: 'WATCH', filterResults: { ...makeCandidate().filterResults, efficiencyAbove30: false } }),
+      BULLISH_GREEN,
+    );
+    expect(result.grade).toBe('A_GRADE_BUY');
   });
 });
 

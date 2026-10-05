@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { cn, formatCurrency, formatPrice } from '@/lib/utils';
 import { apiRequest, formatApiError } from '@/lib/api-client';
+import { ATR_TRAILING_MULTIPLIER } from '@/types';
 import {
   TrendingUp,
   RefreshCw,
@@ -106,7 +107,7 @@ export default function TrailingStopPanel() {
           <Activity className="w-4 h-4 text-primary-400" />
           Trailing ATR Stops
         </h3>
-        <span className="text-[10px] text-muted-foreground font-mono">2× ATR(14)</span>
+        <span className="text-[10px] text-muted-foreground font-mono">{ATR_TRAILING_MULTIPLIER}× ATR(14)</span>
       </div>
 
       {/* Action Buttons */}
@@ -289,7 +290,7 @@ export default function TrailingStopPanel() {
       <div className="mt-4 bg-navy-800/50 rounded-lg p-3 text-[10px] text-muted-foreground space-y-1">
         <p className="font-semibold text-primary-400">How Trailing ATR Stops Work</p>
         <p>
-          Stop = Highest Close Since Entry − 2 × ATR(14). The stop
+          Stop = Highest Close Since Entry − {ATR_TRAILING_MULTIPLIER} × ATR(14), from the entry day. The stop
           ratchets up as price rises but <strong>never</strong> goes down (monotonic enforcement).
         </p>
       </div>

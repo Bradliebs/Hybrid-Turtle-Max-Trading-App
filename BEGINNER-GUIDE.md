@@ -341,7 +341,7 @@ It then gets three scores (see the **Scores** tab on the Scan page). The automat
 | **FWS** — Fatal Weakness | Warning signs (lower is better) | 30 or less |
 | **NCS** — Net Composite | The overall score | 70 or more |
 
-It also needs decent trading volume, and needs to be doing at least as well as the market.
+It also needs decent trading volume and must be doing at least as well as the market (S&P 500) over the last month. Two more things keep an idea out of the A-grade: company results (earnings) due within 5 days, and scores that are more than 36 hours old, for example after a missed nightly run.
 
 ### 10.3 How much to buy
 

@@ -20,7 +20,7 @@ import prisma from '@/lib/prisma';
 import { runFullScan } from '@/lib/scan-engine';
 import { applyModelLayerToCandidates, type ModelVersionManifest } from '../../packages/model/src';
 import { classifyCandidates, type GradingContext } from '@/lib/candidate-grade';
-import { getLatestScoresByTicker } from '@/lib/score-lookup';
+import { getLatestScoresByTicker, isScoreStale } from '@/lib/score-lookup';
 import { saveFilterAttributions } from '@/lib/filter-attribution';
 import { saveCandidateOutcomes } from '@/lib/candidate-outcome';
 import { getDataFreshness, getTickerDataFreshness } from '@/lib/market-data';
@@ -93,7 +93,7 @@ export async function persistScanSnapshot(params: {
   const gradedCandidates = classifyCandidates(modelLayer.candidates, (candidate) => {
     const scores = scoresByTicker.get(candidate.ticker);
     return scores
-      ? { ...baseGradingContext, ncs: scores.ncs, fws: scores.fws, bqs: scores.bqs }
+      ? { ...baseGradingContext, ncs: scores.ncs, fws: scores.fws, bqs: scores.bqs, scoresStale: isScoreStale(scores) }
       : baseGradingContext;
   }).map(candidate => executionCandidates.get(candidate.ticker) ?? candidate);
 

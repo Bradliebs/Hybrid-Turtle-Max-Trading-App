@@ -334,7 +334,7 @@ URL: `/portfolio/positions`
 |-------|---------|---------------|
 | Breakeven | Profit ≥ +1.5R | Entry Price |
 | Partial Lock | Profit ≥ +2.5R | Entry + (0.5 × R) |
-| Trail + Lock | Profit ≥ +3.0R | max(Entry + 1R, Close − 2×ATR) |
+| Trail + Lock | Profit ≥ +3.0R | max(Entry + 1R, Close − 1.5×ATR) |
 
 - Green highlight + ✓ on levels already reached
 - **"Use" button** next to each reached level — click to auto-fill the stop price
@@ -464,7 +464,7 @@ URL: `/risk`
 ### Right Column
 
 - **Trailing Stop Panel** — Shows trailing ATR stop recommendations:
-  - For each position: highest close since entry, current ATR, calculated trailing stop (Highest Close − 2×ATR)
+  - For each position: highest close since entry, current ATR, calculated trailing stop (Highest Close − 1.5×ATR, applied from the entry day)
   - If trailing stop > current stop → recommendation to ratchet up
 - **Protection Progress** — Pie/bar chart showing how many positions are at each protection tier
 
@@ -601,7 +601,7 @@ The **Hedge Portfolio** card appears on the main dashboard and shows:
 Hedge positions still receive the full stop ladder recommendations:
 - **Breakeven** at ≥ 1.5R → stop moves to entry
 - **Partial Lock** at ≥ 2.5R → stop moves to entry + 0.5R
-- **Trail + Lock** at ≥ 3.0R → stop = max(entry + 1R, close − 2×ATR)
+- **Trail + Lock** at ≥ 3.0R → stop = max(entry + 1R, close − 1.5×ATR)
 
 These are shown as guidance badges on the dashboard card. You decide whether to act on them — the system won't auto-apply or flag for forced exit.
 

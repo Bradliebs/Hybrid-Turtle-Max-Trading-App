@@ -37,7 +37,8 @@ vi.mock('@/lib/candidate-grade', () => ({
 }));
 
 const getLatestScoresByTicker = vi.fn();
-vi.mock('@/lib/score-lookup', () => ({
+vi.mock('@/lib/score-lookup', async (importOriginal) => ({
+  isScoreStale: (await importOriginal<typeof import('./score-lookup')>()).isScoreStale,
   getLatestScoresByTicker: (...args: unknown[]) => getLatestScoresByTicker(...args),
 }));
 
@@ -88,7 +89,7 @@ beforeEach(() => {
   stockFindMany.mockReset().mockResolvedValue([{ id: 'stock-1', ticker: 'AAPL' }]);
   scanCreate.mockReset().mockResolvedValue({ id: 'scan-123' });
   getLatestScoresByTicker.mockReset().mockResolvedValue(
-    new Map([['AAPL', { ncs: 75, fws: 20, bqs: 80 }]]),
+    new Map([['AAPL', { ncs: 75, fws: 20, bqs: 80, scoredAt: new Date() }]]),
   );
   saveFilterAttributions.mockReset().mockResolvedValue({ saved: 1, errors: 0 });
   saveCandidateOutcomes.mockReset().mockResolvedValue({ saved: 1, errors: 0 });

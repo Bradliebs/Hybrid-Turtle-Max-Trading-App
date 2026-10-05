@@ -72,4 +72,9 @@ describe('isScoreStale', () => {
     const scores = { ncs: 80, fws: 20, bqs: 80, scoredAt: new Date('2026-04-28T00:00:00Z') };
     expect(isScoreStale(scores, 36, now)).toBe(true);
   });
+
+  it('treats a missing or invalid timestamp as stale', () => {
+    expect(isScoreStale({ ncs: 80, fws: 20, bqs: 80, scoredAt: new Date('invalid') }, 36, now)).toBe(true);
+    expect(isScoreStale({ ncs: 80, fws: 20, bqs: 80 } as never, 36, now)).toBe(true);
+  });
 });

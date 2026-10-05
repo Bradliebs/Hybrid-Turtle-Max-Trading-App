@@ -361,7 +361,7 @@ Currently no profiles set these — they are for future use.
 | `INITIAL` | < 1.5R | `Entry − InitialRisk` |
 | `BREAKEVEN` | ≥ 1.5R | `Entry` (break even) |
 | `LOCK_08R` | ≥ 2.5R | `Entry + 0.5 × InitialRisk` |
-| `LOCK_1R_TRAIL` | ≥ 3.0R | `max(Entry + 1.0 × InitialRisk, Close − 2 × ATR)` |
+| `LOCK_1R_TRAIL` | ≥ 3.0R | `max(Entry + 1.0 × InitialRisk, Close − 1.5 × ATR)` |
 
 ### Stop Recommendation Logic
 
@@ -375,12 +375,18 @@ Currently no profiles set these — they are for future use.
 
 ### Trailing ATR Stop
 
-`calculateTrailingATRStop(ticker, entryPrice, entryDate, currentStop, atrMultiplier=2.0)`:
+`calculateTrailingATRStop(ticker, entryPrice, entryDate, currentStop, atrMultiplier=ATR_TRAILING_MULTIPLIER)` (1.5, from `src/types/index.ts`):
 
-- Walks forward through price history from entry date
-- At each bar: `candidateStop = highestClose − 2 × ATR(14)`
+- Walks forward through price history from the entry date, so it trails from day
+  one, whatever the open profit
+- At each bar: `candidateStop = highestClose − 1.5 × ATR(14)`
+- With the default 1.5 × ATR initial stop, the first close above entry lifts the
+  stop above the initial stop
 - Stop only ratchets UP (monotonic)
 - Returns recommendation only if `trailingStop > currentStop`
+
+The multiple was 2.0 until commit `4280812` (26 April 2026) introduced
+`ATR_TRAILING_MULTIPLIER = 1.5`; every live trade since May has used 1.5.
 
 ### Batch Operations
 
@@ -792,7 +798,7 @@ A `RUNNING` heartbeat is written before Step 0. If the pipeline exits with statu
 | 1 | Health Check | Run 16-point health check |
 | 2 | Live Prices | Fetch live prices for all open positions (batch via Yahoo) + normalise to GBP via FX + check data freshness |
 | 3 | R-Based Stop Recs | Generate R-based stop recommendations + **auto-apply** via `updateStopLoss()` (monotonic violations caught silently) |
-| 3b | Trailing ATR Stops | Generate trailing ATR recs via `generateTrailingStopRecommendations()` + **auto-apply** (2×ATR below highest close) |
+| 3b | Trailing ATR Stops | Generate trailing ATR recs via `generateTrailingStopRecommendations()` + **auto-apply** (1.5×ATR below highest close since entry) |
 | 3c | Gap Risk Detection | HIGH_RISK positions only: flags if gap > 2×ATR%. **Advisory only** (no blocks) |
 | 3d | Stop-Hit Detection | For each open position, checks `currentPrice ≤ currentStop`. Sends `STOP_HIT` alert for each hit |
 | 4 | Laggard Detection | Detect TRIM_LAGGARD + DEAD_MONEY flags (with recovery exemption check) |
@@ -961,7 +967,7 @@ Certain profiles receive looser caps via `getProfileCaps()`. Add new overrides i
 | INITIAL | 0R | Entry − InitialRisk |
 | BREAKEVEN | 1.5R | Entry |
 | LOCK_08R | 2.5R | Entry + 0.5 × InitialRisk |
-| LOCK_1R_TRAIL | 3.0R | max(Entry + 1.0 × InitialRisk, Close − 2×ATR) |
+| LOCK_1R_TRAIL | 3.0R | max(Entry + 1.0 × InitialRisk, Close − 1.5×ATR) |
 
 ---
 

@@ -145,13 +145,13 @@ describe('simulateStopLadder', () => {
 
   it('raises stop to trailing at 3.0R', () => {
     // Entry 100, stop 90, risk = 10. 3.0R = 130.
-    // Trailing: max(entry + 1R, close - 2*ATR) = max(110, 130 - 4) = 126
+    // Trailing: max(entry + 1R, close - 1.5*ATR) = max(110, 130 - 3) = 127 (live ATR_TRAILING_MULTIPLIER)
     const result = simulateStopLadder(100, 90, [
-      makeSnap('2026-04-01', 130, 2), // 3.0R → trailing stop = max(110, 130-4) = 126
-      makeSnap('2026-04-02', 125),     // Below 126 → hits
+      makeSnap('2026-04-01', 130, 2), // 3.0R → trailing stop = max(110, 130-3) = 127
+      makeSnap('2026-04-02', 125),     // Below 127 → hits
     ]);
     expect(result.hit).toBe(true);
-    expect(result.hitR).toBeCloseTo(2.6); // Locked at 126 → (126-100)/10 = 2.6R
+    expect(result.hitR).toBeCloseTo(2.7); // Locked at 127 → (127-100)/10 = 2.7R
   });
 
   it('tracks maxFavR and maxAdvR correctly', () => {

@@ -115,7 +115,7 @@ export function calculateProtectionStop(
 /**
  * Calculate recommended stop adjustment for a position
  * Returns null if no adjustment needed
- * For LOCK_1R_TRAIL: uses max(Entry + 1R, Close − 2×ATR)
+ * For LOCK_1R_TRAIL: uses max(Entry + 1R, Close − ATR_TRAILING_MULTIPLIER × ATR) (currently 1.5×)
  */
 export function calculateStopRecommendation(
   currentPrice: number,

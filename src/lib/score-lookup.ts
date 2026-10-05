@@ -65,6 +65,8 @@ export async function getLatestScoresByTicker(
  */
 export function isScoreStale(scores: CandidateScores | undefined, maxAgeHours = 36, nowMs = Date.now()): boolean {
   if (!scores) return true;
-  const ageHours = (nowMs - scores.scoredAt.getTime()) / (1000 * 60 * 60);
+  const scoredMs = scores.scoredAt instanceof Date ? scores.scoredAt.getTime() : NaN;
+  if (!Number.isFinite(scoredMs)) return true; // unknown age is treated as stale (blocks A-grade)
+  const ageHours = (nowMs - scoredMs) / (1000 * 60 * 60);
   return ageHours > maxAgeHours;
 }

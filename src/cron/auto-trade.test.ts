@@ -61,6 +61,15 @@ describe('auto-trade: session filtering', () => {
     expect(isStockForSession('GSK.L', 'CORE', 'us')).toBe(false);
   });
 
+  it('EU and Australian listings get no session (they used to fall into US sessions)', () => {
+    for (const ticker of ['ASML.AS', 'AIR.PA', 'COLO-B.CO', 'SAP.DE', 'BHP.AX']) {
+      for (const session of ['us', 'us-mid', 'us-close', 'uk', 'uk-mid'] as const) {
+        expect(isStockForSession(ticker, 'CORE', session)).toBe(false);
+      }
+    }
+    expect(isStockForSession('BRK-B', 'CORE', 'us')).toBe(true);
+  });
+
   it('US close session matches same as US session', () => {
     expect(isStockForSession('AAPL', 'CORE', 'us-close')).toBe(true);
     expect(isStockForSession('GSK.L', 'CORE', 'us-close')).toBe(false);

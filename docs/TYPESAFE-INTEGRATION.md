@@ -183,6 +183,34 @@ decision. Letting any claim-blind answer drive the live veto would also need:
 2. an explicit decision by the user;
 3. a circuit breaker, so a model that always says PASS cannot suppress most buys.
 
+### Update 2026-10-01: outcome scoring was not running
+
+Through 1 October the gate reviewed 8 live buys and allowed all 8. The plan above
+to score Jev against `CandidateOutcome` could not have worked until 1 October:
+* **Forward returns:** forward-return enrichment had written nothing since 11
+  September, because a 22:00 UTC guard rejected every scheduled scan.
+* **Scores:** the score backfill had not reached the cohort either.
+
+Both are fixed (see the
+[stock selection assessment](../reports/stock-selection-assessment-2026-10-01.md)).
+The first live nightly run on 1 October enriched 5,664 rows and scored 47,291
+point-in-time with 0 errors, so outcomes now accumulate nightly. Jev's live role
+(keep, switch off, or fund a separate claim-free test) is listed there as an
+open decision.
+
+### Update 2026-10-05: scorecard and grade agreement
+
+[jev_scorecard.py](../scripts/research/jev_scorecard.py) now scores the shadow
+predictions read-only, with two rules fixed before any 20-session outcome
+existed (A-grades only, at least 30 scan dates each): would-veto minus
+would-allow return, and the rank correlation of PASS probability with return.
+So far Jev's pick has matched the stored grade on every graded candidate (TAKE
+on 7 of 7 A-grades, highest PASS 22%; PASS on 10 of 10 B-grades and 2 of 2 chase
+candidates), so the veto has never fired. See the
+[decision-quality review](../reports/jev-and-decision-review-2026-10-05.md).
+On 5 October the owner chose to keep Jev as it is (veto on, no sell authority,
+no extra paid requests) and let the scorecard's tests mature from late October.
+
 ## Local Configuration
 
 Use Node 20 or newer with a compatible `better-sqlite3` native build, PowerShell 7,

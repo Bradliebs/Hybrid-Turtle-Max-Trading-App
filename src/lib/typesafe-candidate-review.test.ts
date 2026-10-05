@@ -36,5 +36,9 @@ describe('candidate evidence privacy and validity', () => {
     const input = { ...evidenceFixture, grade: 'B_GRADE_WATCH', gradeReason: 'Passes filters but not A-grade. NCS 60 < 70. RS -1.0% < 0%' };
     expect(buildCandidateEvidence(input).state).not.toBeNull();
     expect(buildCandidateEvidence({ ...input, gradeReason: input.gradeReason + '. balance 999' }).state).toBeNull();
+    const scored = { ...input, gradeReason: 'Passes filters but not A-grade. RS 42.5 < 50 (50 = level with SPY)' };
+    expect(buildCandidateEvidence(scored).state).not.toBeNull();
+    // Facts Jev cannot see in the evidence (earnings dates, score age) keep the claim out of review.
+    expect(buildCandidateEvidence({ ...input, gradeReason: 'Passes filters but not A-grade. Earnings in 4 days — watch only' }).state).toBeNull();
   });
 });

@@ -32,6 +32,38 @@ Each entry uses this shape (newest at top of the History section):
 
 ## History
 
+### 2026-10-05 - pending - auto-trade.ts: stale scores cannot grade A; US sessions take US listings only
+
+- File(s): `src/cron/auto-trade.ts` (grading context passes `scoresStale: isScoreStale(scores)`; `isStockForSession` US branch now `isUsPriceListing(ticker)`; two imports). Related non-sacred changes in the same decision set: `src/lib/candidate-grade.ts` (relative-strength threshold 0 → 50 on its 0–100 scale; earnings soon (the scanner's `DEMOTE_WATCH`: confirmed in 3–5 days, or an unconfirmed date within 2 days) and stale scores block A-grade), `src/lib/persist-scan-snapshot.ts` (same freshness flag for persisted grades), `src/lib/score-lookup.ts` (`isScoreStale` treats a missing or invalid timestamp as stale), `src/lib/typesafe-candidate-review.ts` (accepts the new RS wording in B-grade claims).
+- Why: Owner approved the review's recommendations on 2026-10-05 (decisions D2, D3, D4, D9 in `reports/stock-selection-assessment-2026-10-01.md`). `isScoreStale` existed but was unused, so scores of any age (up to 527h seen) could grade a buy. EU/Australian listings (.AS, .PA, .CO, .AX …) fell into US sessions because the US branch accepted anything without `.L`; none currently has a broker mapping, so this is a latent fix.
+- Behaviour preserved: Block-only. Nothing can newly become A-grade or be bought. Sizing, stops, ranking, risk gates, Jev gate, ETF-only mode, listing-mismatch guard and order flow unchanged. Low-efficiency READY→WATCH demotions deliberately stay advisory (no evidence they predict worse returns; blocking would have removed 17 of 30 recent A-grades); they are measured by `scripts/research/prospective_shadow_tests.py`. Measured impact on the last 90 days of A-grades: RS fix 0 of 30, stale scores 3 of 30, earnings demotion 0 of 30. Scores are written every day including weekends, so the 36h limit does not block Monday sessions.
+- Tests: `candidate-grade.test.ts` (RS below/at 50, stale scores, earnings demotion, efficiency demotion still A), `auto-trade.test.ts` (EU/AU listings get no session; BRK-B still US), `score-lookup.test.ts` (invalid timestamp), `typesafe-candidate-review.test.ts` (new RS wording approved; earnings wording withheld from Jev). Full suite, typecheck and lint at commit.
+- Author: Copilot CLI agent
+
+### 2026-10-05 - pending - stop-manager.ts: correct a stale comment (no code change)
+
+- File(s): `src/lib/stop-manager.ts` (one JSDoc line on `calculateStopRecommendation`)
+- Why: The comment said LOCK_1R_TRAIL trails at Close − 2×ATR. The code uses `ATR_TRAILING_MULTIPLIER` (1.5) since commit `4280812` (2026-04-26), which lowered both trailing multiples from 2.0 to 1.5 without an entry in this log. Found in the Jev and decision-quality review; user docs corrected in the same change.
+- Behaviour preserved: Everything. Comment only; no stop value, level, ratchet or broker-sync logic touched. Whether to restore 2.0 is an open owner decision (see `reports/jev-and-decision-review-2026-10-05.md`).
+- Tests: typecheck, lint and full suite at commit.
+- Author: Copilot CLI agent
+
+### 2026-04-26 - 4280812 - stop-manager.ts + types: trailing multiple 2.0 → 1.5 (logged retrospectively)
+
+- File(s): `src/types/index.ts` (new `ATR_TRAILING_MULTIPLIER = 1.5`), `src/lib/stop-manager.ts` (`calculateTrailingATRStop` default and the LOCK_1R_TRAIL trail now use it; both were 2.0)
+- Why: Not recorded at the time; the change was part of a bundled "10/10 system upgrade" commit. Entry added 2026-10-05 from `git log -L` so the audit trail is complete.
+- Behaviour preserved: Unknown at the time. Effect: the day-one trailing stop sits 1.5×ATR below the highest close, the same distance as the default initial stop, so the first up-close tightens the stop.
+- Tests: not recorded.
+- Author: unknown (retrospective entry by Copilot CLI agent)
+
+### 2026-10-01 - pending - auto-trade.ts + execute route: block mismatched broker listings
+
+- File(s): `src/cron/auto-trade.ts` (one skip check after the T212-mapping check, two imports), `src/app/api/positions/execute/route.ts` (one safety assertion); new pure `src/lib/listing-identity.ts`
+- Why: Seven active stocks (ASML, NVO, RIO, FCX, MP, REMX, PICK) take prices, sizing and stops from one listing (e.g. RIO.L in pence) but map to a different broker instrument (RIO_US_EQ in USD). A buy would size from the wrong price and place the protective stop in the wrong units, so a sell-stop could sit above the market and fire at once or be rejected. Found in the stock-selection assessment with GPT-6.1 Sol. None had been bought by auto-trade or the Execute route (ASML has two imported January trade-log records).
+- Behaviour preserved: Only blocks: a buy is refused when the market-data listing and the broker listing are in different markets (US vs non-US). No size, price, stop, ranking, grade or risk-gate logic changed. Order of steps unchanged. Audit of the live universe: exactly these 7 of 1,004 mapped stocks are blocked. Skips appear under "Broker mapping" in Telegram.
+- Tests: new `listing-identity.test.ts`; execute-route test that a mismatched listing aborts with no market or stop order (existing fixture using an invalid broker code updated to a valid US code). Full suite and typecheck at commit.
+- Author: Copilot CLI agent
+
 ### 2026-09-29 - pending - auto-trade.ts: lazy Jev gate load, tested filters, JEV_SKIPPED phase
 
 - File(s): `src/cron/auto-trade.ts` (Jev and ETF-only blocks now call `src/lib/auto-trade-filters.ts`; the gate module is imported dynamically only when enabled); new `src/lib/auto-trade-filters.ts`

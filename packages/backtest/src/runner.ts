@@ -14,6 +14,7 @@ import { scoreRow, type SnapshotRow } from '../../../src/lib/dual-score';
 import { calcBPSFromSnapshot, computeRsPercentiles } from '../../../src/lib/breakout-probability';
 import { overlapAdjustedMeanConfidenceInterval } from '../../../src/lib/statistics';
 import { toYahooTicker } from '../../../src/lib/ticker-maps';
+import { ATR_TRAILING_MULTIPLIER } from '../../../src/types';
 import type {
   BacktestConfidenceInterval,
   BacktestEvidenceVerdict,
@@ -206,7 +207,7 @@ export function simulateStopLadder(
     maxAdvR = Math.min(maxAdvR, rMultiple);
 
     if (rMultiple >= 3.0) {
-      currentStop = Math.max(currentStop, Math.max(entryPrice + riskPerShare, snap.close - 2 * snap.atr14));
+      currentStop = Math.max(currentStop, Math.max(entryPrice + riskPerShare, snap.close - ATR_TRAILING_MULTIPLIER * snap.atr14));
     } else if (rMultiple >= 2.5) {
       currentStop = Math.max(currentStop, entryPrice + 0.5 * riskPerShare);
     } else if (rMultiple >= 1.5) {

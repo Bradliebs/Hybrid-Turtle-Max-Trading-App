@@ -9,6 +9,7 @@
  */
 
 import { stripSensitiveData } from './safety-filter';
+import { ATR_TRAILING_MULTIPLIER } from '@/types';
 
 // ── System prompt (constant across all requests) ──
 
@@ -321,9 +322,10 @@ ${historyText}
 
 Protection Level Ladder:
 - INITIAL: Stop at entry minus initial risk (0R protection)
+- TRAILING_ATR: Nightly trailing stop at the highest close since entry minus ${ATR_TRAILING_MULTIPLIER}×ATR, from the entry day
 - BREAKEVEN: Stop at entry price (0R risk, ~1.5R gain needed)
-- LOCK_08R: Stop locks in 0.8R profit (~2.5R gain needed)
-- LOCK_1R_TRAIL: Trailing stop at max of 1R profit or Close - 2×ATR (~3R+)
+- LOCK_08R: Stop locks in 0.5R profit (~2.5R gain needed)
+- LOCK_1R_TRAIL: Trailing stop at max of 1R profit or Close - ${ATR_TRAILING_MULTIPLIER}×ATR (~3R+)
 
 Explain in plain English: Where is the stop now? What does the R-multiple mean? What protection level is active and why? What happens next as the price moves?`);
 

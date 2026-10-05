@@ -70,7 +70,8 @@ describe('necessary entry-policy conditions, not execution approval', () => {
           currentPrice: observation.price!, ma200: 80, adx: 30, plusDI: 25, minusDI: 15,
           atr: 2, atr20DayAgo: 2, atrSpiking: observation.atrSpiking!, medianAtr14: 2,
           atrPercent: 2, twentyDayHigh: 100, efficiency: 55,
-          relativeStrength: observation.relativeStrength!, volumeRatio: observation.volumeRatio!,
+          // Production RS is a 0–100 score; 50 + excess% keeps the sign that both rules test.
+          relativeStrength: 50 + observation.relativeStrength!, volumeRatio: observation.volumeRatio!,
           failedBreakoutAt: null,
         },
         filterResults: {

@@ -1,5 +1,12 @@
 import { DEFAULT_GRADE_THRESHOLDS } from '../src/lib/candidate-grade';
 
+/**
+ * Snapshot `relativeStrength` here is `rsVsBenchmarkPct`: the stock's return minus
+ * SPY's, in percent. Production grades a 0–100 score (50 = level with SPY) against
+ * minRelativeStrength = 50, i.e. "return at least SPY's", which is excess >= 0.
+ */
+export const MIN_RS_EXCESS_PCT = 0;
+
 export interface EntryPolicyObservation {
   regime: string | null;
   status: string | null;
@@ -34,7 +41,7 @@ export function screenEntryPolicy(observation: EntryPolicyObservation, minVolume
   checkNumber('fws', observation.fws, value => value <= DEFAULT_GRADE_THRESHOLDS.maxFWS);
   checkNumber('volume', observation.volumeRatio, value => value >= minVolumeRatio);
   checkNumber('relativeStrength', observation.relativeStrength,
-    value => value >= DEFAULT_GRADE_THRESHOLDS.minRelativeStrength);
+    value => value >= MIN_RS_EXCESS_PCT);
   if (observation.price == null || observation.trigger == null
     || !Number.isFinite(observation.price) || !Number.isFinite(observation.trigger)
     || observation.price <= 0 || observation.trigger <= 0) missing.push('trigger');

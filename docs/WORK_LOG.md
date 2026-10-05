@@ -1243,3 +1243,117 @@ every finding fixed. Findings, in priority order:
 
 Full suite 2,312 passed. Typecheck and lint are clean. The rebuilt dashboard
 was re-tested in the browser.
+
+## 2026-10-01 Stock selection and Jev assessment (with GPT-6.1 Sol)
+
+The user asked whether the Jev integration and selection algorithms pick the
+best stocks. The work ran as an independent-review loop with GPT-6.1 Sol. Full
+findings are in
+[the assessment](../reports/stock-selection-assessment-2026-10-01.md).
+
+### Measurement had stopped
+Outcome enrichment had enriched 0 of 28,952 cohort rows since 11 September: its
+22:00 UTC same-day guard rejected every scheduled scan. Score backfill used the
+latest score within plus or minus 2 days, so it could pick up a score computed
+after the scan. Its fixed 500-row batch never reached the cohort either.
+
+### Fixes
+- **Enrichment guard:** now accepts pre-open, intraday and post-close scans
+  only when the scan price is explained exactly. Intraday (inside the scan
+  day's range) is checked before pre-open, after reviewer round 2. Pre-open also
+  needs the scan clock to be before the listing's regular open (US or London
+  only), after reviewer round 3.
+- **Enrichment throughput:** each claimed page is expanded to all eligible rows
+  of its tickers, so one fetch serves every scan of a ticker; 400 tickers a
+  night.
+- **Score backfill:** now point-in-time and matches all unscored rows.
+
+A rehearsal on a database copy with real prices enriched 342 of 391 rows and
+scored 47,291. UK rows were checked on real bars and all 64 were accepted. The
+cause of the 49 rejections was not established.
+
+The first live run (1 October, 23:00 UK) finished in 334 seconds: 47,291 rows
+scored, 5,664 enriched (including 362 London rows), 0 errors. 653 rows were
+rejected as `SCAN_PRICE_UNEXPLAINED` and 23 as `PRE_OPEN_UNPROVEN`. No
+pre-cohort row was touched. NCPL labels (+122–166% in 5 sessions) look like an
+unadjusted corporate action and were added to decision D8.
+
+### Money-safety fix
+Seven stocks (ASML, NVO, RIO, FCX, MP, REMX, PICK) priced from one listing were
+mapped to a different broker listing, so stops would land in the wrong units.
+Auto-trade and the manual Execute route now refuse such buys. None had been
+bought by auto-trade or the Execute route; ASML has two imported January
+trade-log records.
+
+### Evidence
+Development window, recomputed returns, grading-time scores, holdout untouched.
+These are in-sample associations from one period, not proven skill:
+- `rankScore`, the auto-trade buy order, shows no positive association.
+- Grading-time FWS and NCS show a small, consistent positive association.
+- A high volume ratio goes with worse 20-session returns.
+- An early "A-grades lose money" result came from unadjusted corporate actions
+  and was withdrawn. The 35% exclusion rule used instead was chosen after
+  seeing those outliers, so it is a sensitivity check; with nothing excluded
+  the A-grade proxy is negative again, so its sign is unresolved.
+
+### Open decisions
+Nine decisions are listed in the report, including the buy order, the
+always-true relative-strength gate, the score-age limit, the demotion bypass,
+mixed price bases, mapping corrections, Jev's role and historical relabelling.
+
+### Verification
+Full suite 2,332 passed (2 skipped); typecheck and lint clean. Reviewed over
+four rounds with GPT-6.1 Sol, which judged further review diminishing-return
+in round 4, subject to the live run (since verified).
+
+## 2026-10-05 Jev and decision-quality review (with Claude Sonnet 5.5)
+
+The user asked how to improve buy and sell decisions with Jev, what successful
+automated systems do, and whether to combine day and long-term trading. The
+work ran as an independent-review loop with Claude Sonnet 5.5. Full findings
+are in [the review](../reports/jev-and-decision-review-2026-10-05.md).
+
+### Findings
+- **Jev is inert as a veto:** its pick matched the stored grade on 19 of 19
+  graded candidates; highest PASS on an A-grade was 22% against a 60% threshold.
+- **Entries, not exits, drive most losses:** 12 of 20 trades with local bars
+  never closed above +0.5R (mean −0.81R). The stop level at exit is a path
+  label, so an early "trailing exits lose" comparison was withdrawn after
+  review.
+- **Unlogged trail change:** commit `4280812` (26 April) lowered the trailing
+  stop from 2.0 to 1.5 × ATR. Docs, the trailing-stop panel and the analyst
+  prompt still said 2 × ATR; the backtests still use 2 × ATR.
+- **Day trading:** not recommended (evidence, costs, daily-bar design).
+
+### Changes
+- Docs, `TrailingStopPanel.tsx` and the analyst prompt now state the live
+  multiple (the prompt's `LOCK_08R` description was also wrong).
+- Comment-only fix in `stop-manager.ts`; retrospective sacred-log entry.
+- New read-only scripts: `scripts/research/jev_scorecard.py` (pre-registered)
+  and `scripts/research/live_trade_review.py`.
+
+No live buying or selling behaviour changed. Open decisions N1–N8 are in the
+review.
+
+### Decisions applied (same day)
+The owner approved the review's recommendations for every open item. Applied
+after checking each against data:
+- **Live, block-only:** relative strength must be at least level with SPY (the
+  threshold was 0 on a 0–100 scale); scores older than 36 hours and earnings
+  soon (confirmed in 3–5 days, or unconfirmed within 2) block A-grade; US
+  sessions take US listings only.
+- **Kept advisory:** the low-efficiency demotion. It would have removed 17 of 30
+  recent A-grades, and demoted A-grades did no worse.
+- **Not changed after measurement:** the trailing stop (a development smoke run
+  found 2.0 × ATR, trail-after-+1R and Chandelier all worse), the price basis
+  (90% of instruments unaffected) and the 7 blocked listings.
+- **Research:** historical outcome scores re-scored point-in-time after a
+  database backup (62,598 changed; 2,311 rows from 17 May to 14 September had
+  no score from within 2 days before the scan and are now unscored, as the
+  no-look-ahead rule requires); backtests use the live trailing multiple; new
+  pre-registered `scripts/research/prospective_shadow_tests.py` (signals from 6
+  October; intervals corrected for six tests; expect 6–12 months before most
+  gates can be met).
+- **Jev:** kept as is.
+- **Found:** the local `DailyBar` table stops at 2 September (not refreshed
+  nightly); the shadow tests fetch prices at run time instead.
