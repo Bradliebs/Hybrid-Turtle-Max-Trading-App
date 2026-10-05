@@ -37,8 +37,14 @@ import { createCronLogger } from '@/lib/cron-logger';
 
 // ── Configuration ───────────────────────────────────────────────────
 
-/** Max candidate outcomes to enrich per run (rate-limit friendly) */
-const ENRICHMENT_BATCH_SIZE = 200;
+/**
+ * Candidate outcomes claimed per run. A page holds roughly one row per ticker,
+ * and each claimed ticker's other eligible rows are enriched from the same price
+ * fetch, so this is effectively tickers per run. ~1.4s per fetch → ~10 minutes,
+ * inside the task's 20-minute limit; the ~1,100-ticker universe is swept about
+ * every 3 nights.
+ */
+const ENRICHMENT_BATCH_SIZE = 400;
 
 /** Minimum days old before attempting forward outcome enrichment */
 const ENRICHMENT_MIN_DAYS = 8;

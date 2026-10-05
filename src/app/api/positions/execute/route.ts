@@ -33,6 +33,8 @@ import {
 } from '@/lib/execution-intent';
 import { reconcileExecutionIntent } from '@/lib/execution-reconciliation';
 import { calculatePositionSize } from '@/lib/position-sizer';
+import { brokerListingMismatch } from '@/lib/listing-identity';
+import { toYahooTicker } from '@/lib/ticker-maps';
 import { RISK_PROFILES, type RiskProfileType, type Sleeve } from '@/types';
 
 // ── Types ────────────────────────────────────────────────────
@@ -198,6 +200,13 @@ async function validateSafetyAssertions(
 
   // Use the DB's authoritative t212Ticker — the frontend may send the Yahoo ticker
   // as t212Ticker which would mismatch. The DB is the source of truth.
+
+  // 3b. Price data and broker instrument must be the same listing, otherwise the
+  // stop is placed in the wrong units (e.g. pence on a USD share).
+  const listingMismatch = brokerListingMismatch(toYahooTicker(stock.ticker), stock.t212Ticker);
+  if (listingMismatch) {
+    return { ok: false, error: `ABORT: ${listingMismatch}` };
+  }
 
   // 4. ISA eligibility check — abort if explicitly ineligible
   if (accountType === 'isa' && stock.isaEligible === false) {

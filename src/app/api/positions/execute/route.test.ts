@@ -538,7 +538,7 @@ describe('POST /api/positions/execute', () => {
 
     it('uses DB authoritative T212 ticker even when request ticker differs', async () => {
       prismaMock.stock.findUnique.mockResolvedValue({
-        id: 'stock-abc-123', t212Ticker: 'DIFFERENT_TICKER', isaEligible: null, ticker: 'AAPL',
+        id: 'stock-abc-123', t212Ticker: 'AAPLX_US_EQ', isaEligible: null, ticker: 'AAPL',
       });
 
       setupFullExecution();
@@ -548,10 +548,22 @@ describe('POST /api/positions/execute', () => {
       const response = await POST(req);
       const events = await parseSSEResponse(response);
 
-      // Route should use the DB ticker (DIFFERENT_TICKER), not the request ticker
+      // Route should use the DB ticker (AAPLX_US_EQ), not the request ticker
       expect(mockClient.placeMarketOrder).toHaveBeenCalledWith(
-        expect.objectContaining({ ticker: 'DIFFERENT_TICKER' })
+        expect.objectContaining({ ticker: 'AAPLX_US_EQ' })
       );
+    }, 30_000);
+
+    it('aborts without any order when price data and broker instrument are different listings', async () => {
+      prismaMock.stock.findUnique.mockResolvedValue({
+        id: 'stock-rio', t212Ticker: 'RIO_US_EQ', isaEligible: null, ticker: 'RIO',
+      });
+      setupFullExecution();
+      const response = await POST(makeRequest());
+      const events = await parseSSEResponse(response);
+      expect(JSON.stringify(events)).toContain('Listing mismatch');
+      expect(mockClient.placeMarketOrder).not.toHaveBeenCalled();
+      expect(mockClient.placeStopOrder).not.toHaveBeenCalled();
     }, 30_000);
 
     it('aborts ISA buy if stock is explicitly not ISA eligible', async () => {

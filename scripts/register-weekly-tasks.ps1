@@ -15,7 +15,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 # "The system cannot find the file specified." on every machine.
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
-function Set-TaskResilient($name) {
+function Set-TaskResilient($name, $timeLimit = 'PT10M') {
   $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
   if (-not $task) { return }
 
@@ -35,7 +35,7 @@ function Set-TaskResilient($name) {
   $task.Settings.StopIfGoingOnBatteries = $false
   $task.Settings.IdleSettings.StopOnIdleEnd = $false
   $task.Settings.StartWhenAvailable = $true
-  $task.Settings.ExecutionTimeLimit = "PT10M"
+  $task.Settings.ExecutionTimeLimit = $timeLimit
   try {
     Set-ScheduledTask -InputObject $task -ErrorAction Stop | Out-Null
   } catch {
@@ -97,7 +97,9 @@ Write-Host "Ticker Audit: $LASTEXITCODE"
 # Research Refresh — daily 23:00 (after nightly + T212 sync, idempotent enrichment)
 schtasks /Delete /TN "HybridTurtle-ResearchRefresh" /F 2>$null
 schtasks /Create /TN "HybridTurtle-ResearchRefresh" /SC DAILY /ST 23:00 /TR "`"$root\research-refresh-task.bat`" --scheduled" /RL HIGHEST /F
-Set-TaskResilient "HybridTurtle-ResearchRefresh"
+# ResearchRefresh needs 20 minutes: outcome enrichment fetches ~400 tickers a night
+# (see ENRICHMENT_BATCH_SIZE in src/cron/research-refresh.ts). Matches the audit manifest.
+Set-TaskResilient "HybridTurtle-ResearchRefresh" 'PT20M'
 Write-Host "Research Refresh: $LASTEXITCODE"
 
 Write-Host ""

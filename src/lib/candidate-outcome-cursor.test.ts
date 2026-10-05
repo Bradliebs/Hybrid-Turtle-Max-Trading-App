@@ -111,6 +111,43 @@ describe('enrichment cursor with isolated SQLite and real Prisma', () => {
     expect((await prisma.appSetting.findUnique({ where: { key } }))?.value).toBe('02-valid');
   });
 
+  it('two workers claiming different pages of the same ticker write each row exactly once', async () => {
+    await prisma.$executeRawUnsafe('DELETE FROM CandidateOutcome');
+    for (const id of ['10-same-a', '11-same-b']) {
+      await prisma.$executeRaw`INSERT INTO CandidateOutcome
+        (id, ticker, scanDate, price, entryTrigger, stopPrice) VALUES (${id}, 'SAME', ${scanDate}, 100, 100, 95)`;
+    }
+    let releaseFetches: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseFetches = resolve; });
+    const started: Array<() => void> = [];
+    const fetchStarted = (index: number) => new Promise<void>(resolve => { started[index] = resolve; });
+    const firstStarted = fetchStarted(0);
+    const secondStarted = fetchStarted(1);
+    let calls = 0;
+    fixture.prices.mockImplementation(async () => {
+      started[calls++]?.();
+      await gate;
+      return history;
+    });
+    // Each worker has committed its claim (snapshot of both unenriched rows) before either may write.
+    const first = enrichCandidateOutcomes(8, 1);
+    await firstStarted;
+    const second = enrichCandidateOutcomes(8, 1);
+    await secondStarted;
+    releaseFetches();
+    const [a, b] = await Promise.all([first, second]);
+    expect(fixture.prices).toHaveBeenCalledTimes(2);
+    expect(a.enriched + b.enriched).toBe(2);
+    expect(a.skipped + b.skipped).toBe(2); // the losing worker's two expected-state writes match nothing
+    expect(a.errors + b.errors).toBe(0);
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('CONCURRENT_CHANGE'));
+    expect(await prisma.candidateOutcome.findMany({ orderBy: { id: 'asc' },
+      select: { id: true, fwdReturn5d: true, fwdReturn10d: true, fwdReturn20d: true } })).toEqual([
+      { id: '10-same-a', fwdReturn5d: 5, fwdReturn10d: 10, fwdReturn20d: 20 },
+      { id: '11-same-b', fwdReturn5d: 5, fwdReturn10d: 10, fwdReturn20d: 20 },
+    ]);
+  });
+
   it('rolls back a failed cursor claim and retries the same page without fetching early', async () => {
     await prisma.$executeRawUnsafe(`CREATE TRIGGER reject_cursor BEFORE INSERT ON AppSetting
       BEGIN SELECT RAISE(ABORT, 'cursor unavailable'); END`);

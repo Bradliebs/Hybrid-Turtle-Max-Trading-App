@@ -7,7 +7,7 @@ vi.mock('./prisma', () => ({ default: {
 } }));
 vi.mock('./market-data', () => ({ getDailyPrices: mocks.prices }));
 
-import { computeForwardMetrics, enrichCandidateOutcomes, ENRICHMENT_COHORT_START, prepareEnrichmentWindow } from './candidate-outcome-enrichment';
+import { computeForwardMetrics, enrichCandidateOutcomes, ENRICHMENT_COHORT_START, prepareEnrichmentWindow, scannedBeforeRegularOpen } from './candidate-outcome-enrichment';
 
 const row = { id: 'candidate-1', ticker: 'TEST', scanDate: new Date('2026-09-11T22:00:00Z'),
   price: 100, entryTrigger: 100, stopPrice: 95, enrichedAt: null as Date | null,
@@ -139,6 +139,99 @@ describe('outcome enrichment regressions and evidence limitations', () => {
     expect(prepare(changed)).toMatchObject({ bars: valid.bars.slice(0, 7), reason: 'ADJUSTMENT_FACTOR_CHANGED' });
   });
 
+  describe('scans before 22:00 UTC (every scheduled scan)', () => {
+    // anchor = finalized scan-day bar (2026-09-11: close 100, range 99–101)
+    const eveningScan = new Date('2026-09-11T19:00:00Z');
+    const previousSession = { date: '2026-09-10', close: 98, high: 99, low: 97, rawClose: 98, adjustedClose: 98,
+      fetchedAt: Date.parse('2026-09-11') };
+    const prepareAt = (price: number, prices: typeof history = [previousSession, ...history]) =>
+      prepareEnrichmentWindow(eveningScan, price, prices, new Date('2026-11-01'));
+
+    it('accepts a scan that already saw the final close (e.g. LSE stock in the evening scan)', () => {
+      const result = prepareAt(100);
+      expect(result.reason).toBeNull();
+      expect(result.bars[0].date).toBe(bars[0].date);
+    });
+
+    it('accepts an intraday quote inside the finalized session range as the baseline', () => {
+      const result = prepareAt(100.5);
+      expect(result.reason).toBeNull();
+      expect(result.bars[0].date).toBe(bars[0].date);
+      expect(computeForwardMetrics(100.5, 100, 95, result.bars).fwdReturn5d).toBeCloseTo(((105 - 100.5) / 100.5) * 100, 9);
+    });
+
+    it('treats a scan priced at the previous close as pre-open only with clock proof and a gap', () => {
+      // 13:00 UTC = 09:00 New York (before the 09:30 open)
+      const usMorning = prepareEnrichmentWindow(new Date('2026-09-11T13:00:00Z'), 98, [previousSession, ...history],
+        new Date('2026-11-01'), 'AAPL');
+      expect(usMorning.reason).toBeNull();
+      expect(usMorning.bars[0].date).toBe('2026-09-11');
+      expect(usMorning.bars).toHaveLength(20);
+      // 06:30 UTC = 07:30 London (before the 08:00 open)
+      expect(prepareEnrichmentWindow(new Date('2026-09-11T06:30:00Z'), 98, [previousSession, ...history],
+        new Date('2026-11-01'), 'RIO.L').reason).toBeNull();
+    });
+
+    it('rejects a previous-close match seen after the open (stale quote) or with no provable exchange clock', () => {
+      expect(prepareAt(98).reason).toBe('PRE_OPEN_UNPROVEN');
+      expect(prepareEnrichmentWindow(eveningScan, 98, [previousSession, ...history], new Date('2026-11-01'), 'AAPL').reason)
+        .toBe('PRE_OPEN_UNPROVEN');
+      expect(prepareEnrichmentWindow(new Date('2026-09-11T13:00:00Z'), 98, [previousSession, ...history],
+        new Date('2026-11-01'), 'RIO.L').reason).toBe('PRE_OPEN_UNPROVEN');
+      expect(prepareEnrichmentWindow(new Date('2026-09-11T06:30:00Z'), 98, [previousSession, ...history],
+        new Date('2026-11-01'), 'SAP.DE').reason).toBe('PRE_OPEN_UNPROVEN');
+    });
+
+    it('proves the regular open in exchange local time across daylight-saving changes', () => {
+      // Winter: New York opens 14:30 UTC, London 08:00 UTC.
+      expect(scannedBeforeRegularOpen(new Date('2026-12-01T14:00:00Z'), 'AAPL')).toBe(true);
+      expect(scannedBeforeRegularOpen(new Date('2026-12-01T14:30:00Z'), 'AAPL')).toBe(false);
+      expect(scannedBeforeRegularOpen(new Date('2026-12-01T07:59:00Z'), 'RIO.L')).toBe(true);
+      // Summer: New York opens 13:30 UTC, London 07:00 UTC.
+      expect(scannedBeforeRegularOpen(new Date('2026-07-01T13:30:00Z'), 'AAPL')).toBe(false);
+      expect(scannedBeforeRegularOpen(new Date('2026-07-01T07:00:00Z'), 'RIO.L')).toBe(false);
+      // Late UTC evening is the previous New York day, never pre-open for the UTC scan day.
+      expect(scannedBeforeRegularOpen(new Date('2026-07-01T02:00:00Z'), 'AAPL')).toBe(false);
+    });
+
+    it('never infers pre-open from a previous-close match inside the scan-day range', () => {
+      // Previous close 100.5 also traded during the scan day (range 99–101): ambiguous,
+      // so it is treated as intraday and the scan day (with its earlier low) is not counted.
+      const flatPrevious = { ...previousSession, close: 100.5, rawClose: 100.5, adjustedClose: 100.5, high: 101, low: 100 };
+      const scanDayWithEarlyBreach = { ...anchor, low: 90 };
+      const result = prepareAt(100.5, [flatPrevious, scanDayWithEarlyBreach, ...bars]);
+      expect(result.reason).toBeNull();
+      expect(result.bars[0].date).toBe(bars[0].date);
+      expect(computeForwardMetrics(100.5, 100, 95, result.bars).stopHit).toBe(false);
+    });
+
+    it('rejects prices it cannot explain: wrong units, outside the range, or an adjusted anchor', () => {
+      expect(prepareAt(10_050).reason).toBe('SCAN_PRICE_UNEXPLAINED');
+      expect(prepareAt(102.5).reason).toBe('SCAN_PRICE_UNEXPLAINED');
+      const adjustedAnchor = [previousSession, { ...anchor, close: 99, adjustedClose: 99 }, ...bars];
+      expect(prepareAt(100.5, adjustedAnchor).reason).toBe('SCAN_PRICE_UNEXPLAINED');
+    });
+
+    it('does not treat the previous close as pre-open when a session is missing in between', () => {
+      const olderSession = { ...previousSession, date: '2026-09-09' };
+      expect(prepareAt(98, [olderSession, ...history]).reason).toBe('SCAN_PRICE_UNEXPLAINED');
+    });
+
+    it('keeps the exact-close rule for scans at or after 22:00 UTC', () => {
+      expect(prepareEnrichmentWindow(row.scanDate, 100.5, [previousSession, ...history], new Date('2026-11-01')).reason)
+        .toBe('SCAN_BASELINE_MISMATCH');
+    });
+  });
+
+  it('enriches every eligible scan of a claimed ticker with one price fetch', async () => {
+    const later = { ...row, id: 'candidate-2' };
+    mocks.findMany.mockImplementation(async ({ where }) => where.ticker?.in ? [row, later] : [row]);
+    mocks.prices.mockResolvedValue(history);
+    expect(await enrichCandidateOutcomes(8, 1)).toEqual({ enriched: 2, skipped: 0, errors: 0 });
+    expect(mocks.prices).toHaveBeenCalledTimes(1);
+    expect(mocks.update.mock.calls.map(call => call[0].where.id).sort()).toEqual(['candidate-1', 'candidate-2']);
+  });
+
   it('counts fetch and database failures without reporting successful enrichment', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     mocks.prices.mockRejectedValueOnce(new Error('provider down'));
@@ -160,6 +253,8 @@ describe('outcome enrichment regressions and evidence limitations', () => {
     mocks.findMany.mockImplementation(async ({ where, take, orderBy }) => {
       expect(where.scanDate.gte).toEqual(ENRICHMENT_COHORT_START);
       expect(orderBy).toEqual({ id: 'asc' });
+      // Sibling expansion: every eligible row of the claimed page's tickers (unbounded by design).
+      if (where.ticker?.in) return candidates.filter(candidate => where.ticker.in.includes(candidate.ticker));
       expect(take).toBe(1);
       return candidates.filter(candidate => !where.id || candidate.id > where.id.gt).slice(0, take);
     });
@@ -173,7 +268,8 @@ describe('outcome enrichment regressions and evidence limitations', () => {
     expect(await enrichCandidateOutcomes(8, 1)).toEqual({ enriched: 0, skipped: 0, errors: 1 });
     expect(await enrichCandidateOutcomes(8, 1)).toEqual({ enriched: 0, skipped: 1, errors: 0 });
     expect(mocks.prices.mock.calls.map(call => call[0])).toEqual(['REJECTED', 'VALID', 'FAILED', 'REJECTED']);
-    expect(mocks.findMany).toHaveBeenCalledTimes(5);
+    // 5 page claims (one wrap) + 4 sibling expansions; still one fetch per ticker per run.
+    expect(mocks.findMany).toHaveBeenCalledTimes(9);
     expect(mocks.update).toHaveBeenCalledTimes(1);
   });
 

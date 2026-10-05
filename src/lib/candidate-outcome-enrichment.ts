@@ -11,6 +11,7 @@
  */
 import prisma from './prisma';
 import { getDailyPrices } from './market-data';
+import { toYahooTicker } from './ticker-maps';
 
 export const ENRICHMENT_COHORT_START = new Date('2026-09-11T00:00:00Z');
 const ENRICHMENT_CURSOR_KEY = 'candidate-outcome-enrichment.cursor.v1';
@@ -132,11 +133,34 @@ export function computeForwardMetrics(
 
 // ── Batch enrichment ────────────────────────────────────────────────
 
+const REGULAR_OPEN: Record<'US' | 'UK', { timeZone: string; minutes: number }> = {
+  US: { timeZone: 'America/New_York', minutes: 9 * 60 + 30 },
+  UK: { timeZone: 'Europe/London', minutes: 8 * 60 },
+};
+
+/**
+ * True only when the scan provably ran before the listing's regular open on the
+ * scan day (exchange local time). Unknown exchanges are never proven.
+ */
+export function scannedBeforeRegularOpen(scanDate: Date, priceSymbol: string): boolean {
+  const symbol = priceSymbol.trim().toUpperCase();
+  const market = symbol.endsWith('.L') ? 'UK' : /\.[A-Z]{1,4}$/.test(symbol) || symbol.startsWith('^') ? null : 'US';
+  if (!market || !Number.isFinite(scanDate.getTime())) return false;
+  const { timeZone, minutes } = REGULAR_OPEN[market];
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(scanDate).map(part => [part.type, part.value]));
+  const localDay = `${parts.year}-${parts.month}-${parts.day}`;
+  if (localDay !== scanDate.toISOString().slice(0, 10)) return false;
+  return Number(parts.hour) * 60 + Number(parts.minute) < minutes;
+}
+
 export function prepareEnrichmentWindow(
   scanDate: Date,
   scanPrice: number,
   providerBars: PriceBar[],
-  asOf: Date
+  asOf: Date,
+  priceSymbol?: string
 ): { bars: PriceBar[]; reason: string | null } {
   const reject = (reason: string) => ({ bars: [], reason });
   if (!Number.isFinite(scanDate.getTime()) || !Number.isFinite(asOf.getTime())
@@ -150,17 +174,58 @@ export function prepareEnrichmentWindow(
   }
   const sorted = [...providerBars].sort((left, right) => left.date.localeCompare(right.date));
   const anchors = sorted.filter(bar => bar.date <= scanDay);
-  const anchor = anchors.at(-1);
-  if (!anchor || Date.parse(scanDay) - Date.parse(anchor.date) > 3 * 86400000) {
+  const scanAnchor = anchors.at(-1);
+  if (!scanAnchor || Date.parse(scanDay) - Date.parse(scanAnchor.date) > 3 * 86400000) {
     return reject('MISSING_SCAN_ANCHOR');
   }
-  if (anchors.filter(bar => bar.date === anchor.date).length !== 1) return reject('DUPLICATE_ANCHOR');
+  if (anchors.filter(bar => bar.date === scanAnchor.date).length !== 1) return reject('DUPLICATE_ANCHOR');
   const observedComplete = (bar: PriceBar) => bar.fetchedAt !== undefined && Number.isFinite(bar.fetchedAt)
     && bar.fetchedAt >= Date.parse(bar.date) + 86400000 && bar.fetchedAt <= asOf.getTime();
-  if (!observedComplete(anchor)) return reject('UNPROVEN_ANCHOR_FINALIZATION');
-  if ([0, 6].includes(new Date(anchor.date).getUTCDay())) return reject('NON_SESSION_ANCHOR');
-  if (anchor.date === scanDay && scanDate.getUTCHours() < 22) return reject('SCAN_BEFORE_POST_CLOSE_CUTOFF');
-  if (!positiveFinite(anchor.close) || !sameValue(anchor.close, scanPrice)) return reject('SCAN_BASELINE_MISMATCH');
+  if (!observedComplete(scanAnchor)) return reject('UNPROVEN_ANCHOR_FINALIZATION');
+  if ([0, 6].includes(new Date(scanAnchor.date).getUTCDay())) return reject('NON_SESSION_ANCHOR');
+  let anchor: PriceBar = scanAnchor;
+  const nextWeekday = (day: string) => {
+    const date = new Date(`${day}T00:00:00Z`);
+    do { date.setUTCDate(date.getUTCDate() + 1); } while ([0, 6].includes(date.getUTCDay()));
+    return date.toISOString().slice(0, 10);
+  };
+  // A scan before 22:00 UTC may have seen the scan-day session before it was final.
+  // (Every scheduled scan runs before then, so rejecting them all left the cohort
+  // with no outcomes.) Accept it only when the scan price is explained exactly:
+  //  - it equals the finalized close → the scan ran after that market closed;
+  //  - it lies inside the finalized session's raw range with no price adjustment
+  //    → treated as an intraday quote and used as the baseline; counting starts at
+  //    the next session (range proves units, not identity). A price equal to the
+  //    previous close also lands here: equality alone does not prove the session
+  //    had not opened, so the scan day is never counted from it;
+  //  - it equals the previous session close AND lies outside the scan-day range
+  //    AND the scan clock is before the listing's regular open → pre-open scan:
+  //    anchor on that close and count the scan-day session as bar 1. Without the
+  //    clock proof it could be a stale quote seen mid-session, so it is rejected.
+  // Anything else is rejected. Scans at or after 22:00 UTC keep the exact-close rule.
+  let windowStart = scanDay;
+  let intradayBaseline = false;
+  if (anchor.date === scanDay && scanDate.getUTCHours() < 22 && !sameValue(anchor.close, scanPrice)) {
+    const inSessionRange = positiveFinite(anchor.low) && positiveFinite(anchor.high)
+      && scanPrice >= anchor.low * (1 - 1e-6) && scanPrice <= anchor.high * (1 + 1e-6);
+    const previous = anchors.filter(bar => bar.date < scanDay).at(-1);
+    if (inSessionRange) {
+      if (anchor.rawClose === undefined || anchor.adjustedClose === undefined
+        || !sameValue(anchor.rawClose, anchor.adjustedClose)) return reject('SCAN_PRICE_UNEXPLAINED');
+      intradayBaseline = true;
+    } else if (previous && anchors.filter(bar => bar.date === previous.date).length === 1
+      && nextWeekday(previous.date) === scanDay && observedComplete(previous)
+      && positiveFinite(previous.close) && sameValue(previous.close, scanPrice)) {
+      if (!priceSymbol || !scannedBeforeRegularOpen(scanDate, priceSymbol)) return reject('PRE_OPEN_UNPROVEN');
+      anchor = previous;
+      windowStart = previous.date;
+    } else {
+      return reject('SCAN_PRICE_UNEXPLAINED');
+    }
+  }
+  if (!intradayBaseline && (!positiveFinite(anchor.close) || !sameValue(anchor.close, scanPrice))) {
+    return reject('SCAN_BASELINE_MISMATCH');
+  }
   if (anchor.rawClose === undefined || anchor.adjustedClose === undefined
     || !positiveFinite(anchor.rawClose) || !positiveFinite(anchor.adjustedClose)
     || !sameValue(anchor.close, anchor.adjustedClose)) return reject('MISSING_PRICE_BASIS');
@@ -168,15 +233,12 @@ export function prepareEnrichmentWindow(
   if (!positiveFinite(adjustmentFactor)) return reject('INVALID_PRICE_BASIS');
   if (![anchor.high, anchor.low].every(positiveFinite)
     || anchor.high < anchor.rawClose || anchor.low > anchor.rawClose) return reject('INVALID_ANCHOR_BAR');
-  const nextWeekday = (day: string) => {
-    const date = new Date(`${day}T00:00:00Z`);
-    do { date.setUTCDate(date.getUTCDate() + 1); } while ([0, 6].includes(date.getUTCDay()));
-    return date.toISOString().slice(0, 10);
-  };
-  if (anchor.date < scanDay && nextWeekday(anchor.date) <= scanDay) return reject('UNPROVEN_ANCHOR_GAP');
-  const candidates = sorted.filter(bar => bar.date > scanDay && bar.date < today);
+  if (windowStart === scanDay && anchor.date < scanDay && nextWeekday(anchor.date) <= scanDay) {
+    return reject('UNPROVEN_ANCHOR_GAP');
+  }
+  const candidates = sorted.filter(bar => bar.date > windowStart && bar.date < today);
   const bars: PriceBar[] = [];
-  let expected = nextWeekday(scanDay);
+  let expected = nextWeekday(windowStart);
   for (const bar of candidates) {
     if (bars.length === 20) break;
     if (bar.date !== expected) return { bars, reason: 'MISSING_OR_NON_SESSION_BAR' };
@@ -207,7 +269,8 @@ export function prepareEnrichmentWindow(
  * - one or more return horizons remain missing
  *
  * @param minDaysOld - minimum calendar days since scan to attempt enrichment (default: 8 — gives ~5 trading days)
- * @param maxRows - maximum rows to process per batch (default: 100 — rate-limit friendly)
+ * @param maxRows - rows claimed per batch (default: 100). Every other eligible row of the
+ *                  claimed tickers is enriched from the same fetch, so this bounds fetches.
  * @returns count of rows enriched
  */
 export async function enrichCandidateOutcomes(
@@ -220,43 +283,57 @@ export async function enrichCandidateOutcomes(
   const asOf = new Date();
   const cutoff = new Date(asOf.getTime() - minDaysOld * 86400000);
 
+  const eligibility = {
+    scanDate: { gte: ENRICHMENT_COHORT_START, lte: cutoff },
+    OR: [{ fwdReturn5d: null }, { fwdReturn10d: null }, { fwdReturn20d: null }],
+  };
+  const rowSelect = {
+    id: true,
+    ticker: true,
+    scanDate: true,
+    price: true,
+    entryTrigger: true,
+    stopPrice: true,
+    enrichedAt: true,
+    fwdReturn5d: true,
+    fwdReturn10d: true,
+    fwdReturn20d: true,
+  } as const;
+
   const rows = await prisma.$transaction(async (transaction) => {
     const cursor = await transaction.appSetting.findUnique({
       where: { key: ENRICHMENT_CURSOR_KEY },
       select: { value: true },
     });
-    const eligibility = {
-      scanDate: { gte: ENRICHMENT_COHORT_START, lte: cutoff },
-      OR: [{ fwdReturn5d: null }, { fwdReturn10d: null }, { fwdReturn20d: null }],
-    };
     const selectPage = (afterId?: string) => transaction.candidateOutcome.findMany({
       where: { ...eligibility, ...(afterId ? { id: { gt: afterId } } : {}) },
       orderBy: { id: 'asc' },
       take: maxRows,
-      select: {
-        id: true,
-        ticker: true,
-        scanDate: true,
-        price: true,
-        entryTrigger: true,
-        stopPrice: true,
-        enrichedAt: true,
-        fwdReturn5d: true,
-        fwdReturn10d: true,
-        fwdReturn20d: true,
-      },
+      select: rowSelect,
     });
-    let page = await selectPage(cursor?.value);
-    if (page.length === 0 && cursor?.value) page = await selectPage();
-    if (page.length > 0) {
-      const value = page[page.length - 1].id;
-      await transaction.appSetting.upsert({
-        where: { key: ENRICHMENT_CURSOR_KEY },
-        create: { key: ENRICHMENT_CURSOR_KEY, value },
-        update: { value },
-      });
-    }
-    return page;
+    let claimed = await selectPage(cursor?.value);
+    if (claimed.length === 0 && cursor?.value) claimed = await selectPage();
+    if (claimed.length === 0) return claimed;
+    const value = claimed[claimed.length - 1].id;
+    await transaction.appSetting.upsert({
+      where: { key: ENRICHMENT_CURSOR_KEY },
+      create: { key: ENRICHMENT_CURSOR_KEY, value },
+      update: { value },
+    });
+
+    // Each scan repeats the whole universe, so a page holds ~one row per ticker.
+    // One price fetch serves every eligible row of that ticker, so enrich them all
+    // now instead of fetching the same ticker again for each later scan. Rows the
+    // cursor reaches later are then complete (no longer eligible) or retried
+    // safely: writes are expected-state updates and never overwrite a return.
+    const siblings = await transaction.candidateOutcome.findMany({
+      where: { ...eligibility, ticker: { in: Array.from(new Set(claimed.map(row => row.ticker))) } },
+      orderBy: { id: 'asc' },
+      select: rowSelect,
+    });
+    const byId = new Map(claimed.map(row => [row.id, row]));
+    for (const row of siblings ?? []) if (!byId.has(row.id)) byId.set(row.id, row);
+    return Array.from(byId.values());
   });
 
   let enriched = 0;
@@ -302,7 +379,7 @@ export async function enrichCandidateOutcomes(
         skipped++;
         continue;
       }
-      const window = prepareEnrichmentWindow(row.scanDate, row.price, bars, observedAt);
+      const window = prepareEnrichmentWindow(row.scanDate, row.price, bars, observedAt, toYahooTicker(ticker));
       const forwardBars = window.bars;
       if (window.reason) console.warn(`[CandidateOutcome] ${row.id}: ${window.reason}`);
 

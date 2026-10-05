@@ -84,7 +84,8 @@ export function categorizeSkipReason(reason: string): SkipCategory {
 
   if (
     r.includes('no t212 ticker') ||
-    r.includes('no suitable t212 account')
+    r.includes('no suitable t212 account') ||
+    r.startsWith('listing mismatch')
   ) return 'BROKER_MAPPING';
 
   if (
