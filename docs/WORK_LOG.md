@@ -1357,3 +1357,12 @@ after checking each against data:
 - **Jev:** kept as is.
 - **Found:** the local `DailyBar` table stops at 2 September (not refreshed
   nightly); the shadow tests fetch prices at run time instead.
+
+### CI audit (same day)
+CI had failed since 3 October on two new advisories. esbuild (dev server file
+read on Windows) is fixed by updating `tsx` within its existing range (esbuild
+0.28.2). braces (GHSA-vfj7-8cjw-p6xm) has no patched version, and npm's only fix
+is a breaking Tailwind v4 migration. It is reached only through build-time
+globbing of our own config, so it is allowlisted in the new
+`scripts/ci-audit.mjs`. CI fails again after 2027-01-05 so the exception is
+reviewed. Any other high or critical advisory still fails CI.

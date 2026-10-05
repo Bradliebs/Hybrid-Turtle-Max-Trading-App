@@ -30,7 +30,7 @@ jobs:
         run: npm ci
 
       - name: Audit for high/critical vulnerabilities
-        run: npm audit --audit-level=high
+        run: node scripts/ci-audit.mjs
 
       - name: Ensure Prisma SQLite path exists
         run: mkdir -p prisma && touch prisma/dev.db
