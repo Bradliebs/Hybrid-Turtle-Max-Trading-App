@@ -1417,3 +1417,14 @@ No live behaviour changed. Decisions N1–N5 are in the review.
 - **Restart check** added to `prospective_shadow_tests.py`: LIVE alone, one entry per ticker per 56 days, at least 30 candidates on 15 dates and 15 tickers, 95% lower bound above zero.
 - **New recommendation, needs owner decision:** pause new buys with
   CAPITAL_PRESERVATION until the restart check passes.
+
+## 2026-10-08 One-time holdout test
+
+The owner asked whether the history could show where the rules go wrong. Five
+hypotheses were frozen in `scripts/research/holdout_test.py` (commit
+`5cd374f`) and run once on the untouched August–September holdout. Only H5,
+selling automatically on the failed-breakout flag, passed (+0.13R per trade,
+interval +0.03 to +0.23, 531 trades). NCS ordering, FWS (reversed sign) and
+"breakouts underperform" did not hold. Every filter-passing candidate lost 3.2%
+on average in that period. The holdout is now seen. Decisions are in
+[the report](../reports/holdout-test-2026-10-08.md).
