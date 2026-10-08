@@ -116,46 +116,64 @@ describe('filterTriggerMet', () => {
 // ── getSnapshotAge ───────────────────────────────────────────
 
 describe('getSnapshotAge', () => {
+  const mondayMorning = new Date('2026-08-10T09:00:00.000Z');
+
   it('returns critical for null input', () => {
-    const age = getSnapshotAge(null);
+    const age = getSnapshotAge(null, mondayMorning);
     expect(age.stale).toBe(true);
     expect(age.critical).toBe(true);
     expect(age.label).toBe('No snapshot data');
   });
 
   it('returns critical for invalid date', () => {
-    const age = getSnapshotAge('not-a-date');
+    const age = getSnapshotAge('not-a-date', mondayMorning);
     expect(age.critical).toBe(true);
   });
 
   it('returns fresh for recent snapshot', () => {
-    const recentDate = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(); // 2 hours ago
-    const age = getSnapshotAge(recentDate);
+    const recentDate = '2026-08-10T07:00:00.000Z';
+    const age = getSnapshotAge(recentDate, mondayMorning);
     expect(age.stale).toBe(false);
     expect(age.critical).toBe(false);
     expect(age.hours).toBeCloseTo(2, 0);
   });
 
   it('returns stale (not critical) for 3-day-old snapshot', () => {
-    const threeDaysAgo = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
-    const age = getSnapshotAge(threeDaysAgo);
+    const fridayMorning = new Date('2026-08-07T09:00:00.000Z');
+    const age = getSnapshotAge('2026-08-04T09:00:00.000Z', fridayMorning);
     expect(age.stale).toBe(true);
     expect(age.critical).toBe(false);
     expect(age.label).toBe('3d ago');
   });
 
-  it('returns critical for 8-day-old snapshot', () => {
-    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
-    const age = getSnapshotAge(eightDaysAgo);
+  it('returns critical after more than 7 weekday days', () => {
+    const fridayMorning = new Date('2026-08-14T09:00:00.000Z');
+    const age = getSnapshotAge('2026-08-04T09:00:00.000Z', fridayMorning);
     expect(age.stale).toBe(true);
     expect(age.critical).toBe(true);
-    expect(age.label).toBe('8d ago');
+    expect(age.label).toBe('10d ago');
   });
 
   it('shows "Just now" for very recent data', () => {
-    const justNow = new Date(Date.now() - 30 * 60 * 1000).toISOString(); // 30 mins ago
-    const age = getSnapshotAge(justNow);
+    const age = getSnapshotAge('2026-08-10T08:30:00.000Z', mondayMorning);
     expect(age.label).toBe('Just now');
+  });
+
+  it('keeps a Friday evening snapshot fresh on Monday morning', () => {
+    const age = getSnapshotAge('2026-08-07T18:00:00.000Z', mondayMorning);
+
+    expect(age.hours).toBe(63);
+    expect(age.label).toBe('3d ago');
+    expect(age.stale).toBe(false);
+    expect(age.critical).toBe(false);
+  });
+
+  it('becomes stale after more than 48 weekday hours', () => {
+    const thursdayMorning = new Date('2026-08-13T09:00:00.000Z');
+    const age = getSnapshotAge('2026-08-07T09:00:00.000Z', thursdayMorning);
+
+    expect(age.stale).toBe(true);
+    expect(age.critical).toBe(false);
   });
 });
 

@@ -8,6 +8,7 @@
  */
 
 import prisma from './prisma';
+import { computeCapitalAdjustedDrawdown, fromFirstBrokerSnapshot, loadCapitalEvents } from './capital-adjusted-drawdown';
 import { overlapAdjustedMeanConfidenceInterval, type ConfidenceInterval } from './statistics';
 
 // ── System Grade ─────────────────────────────────────────────
@@ -103,23 +104,15 @@ export async function computeProfitScoreboard(userId: string = 'default-user'): 
   const sortedDays = [...holdDays].sort((a, b) => a - b);
   const medianHoldDays = sortedDays.length > 0 ? sortedDays[Math.floor(sortedDays.length / 2)] : null;
 
-  // Drawdown from equity snapshots
-  const snapshots = await prisma.equitySnapshot.findMany({
-    orderBy: { capturedAt: 'asc' },
-    select: { equity: true },
-  });
-  let maxDrawdownPct = 0;
-  let currentDrawdownPct = 0;
-  if (snapshots.length > 0) {
-    let peak = snapshots[0].equity;
-    for (const s of snapshots) {
-      if (s.equity > peak) peak = s.equity;
-      const dd = peak > 0 ? ((peak - s.equity) / peak) * 100 : 0;
-      if (dd > maxDrawdownPct) maxDrawdownPct = dd;
-    }
-    const current = snapshots[snapshots.length - 1].equity;
-    currentDrawdownPct = peak > 0 ? ((peak - current) / peak) * 100 : 0;
-  }
+  // Drawdown from equity snapshots, capital-adjusted so withdrawals are not losses
+  const [snapshots, capitalEvents] = await Promise.all([
+    prisma.equitySnapshot.findMany({
+      orderBy: { capturedAt: 'asc' },
+      select: { equity: true, capturedAt: true, source: true },
+    }),
+    loadCapitalEvents(),
+  ]);
+  const { maxDrawdownPct, currentDrawdownPct } = computeCapitalAdjustedDrawdown(fromFirstBrokerSnapshot(snapshots), capitalEvents);
 
   const expectancyInterval = overlapAdjustedMeanConfidenceInterval(dailyMeanR, 20);
   const { verdict, verdictReason } = computeEvidenceVerdict(

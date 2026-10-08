@@ -247,6 +247,22 @@ describe('Trading212Client.getOrderHistory', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('pages through cash transactions with GET only', async () => {
+    const fetchMock = vi.mocked(fetch);
+    const page = (items: unknown[], nextPagePath: string | null) => new Response(JSON.stringify({ items, nextPagePath }));
+    fetchMock
+      .mockResolvedValueOnce(page([{ type: 'WITHDRAW', amount: -400, currency: 'GBP', dateTime: '2026-08-03T09:00:00Z', reference: 'w1' }],
+        '/api/v0/equity/history/transactions?limit=50&cursor=c2'))
+      .mockResolvedValueOnce(page([{ type: 'DEPOSIT', amount: 1000, currency: 'GBP', dateTime: '2026-01-02T09:00:00Z', reference: 'd1' }], null));
+
+    const client = new Trading212Client('key', 'secret', 'demo');
+    const items = await client.getCashTransactions(50);
+
+    expect(items.map(item => item.reference)).toEqual(['w1', 'd1']);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://demo.trading212.com/api/v0/equity/history/transactions?limit=50&cursor=c2', expect.any(Object));
+    expect(fetchMock.mock.calls.every(([, init]) => !init?.method || init.method === 'GET')).toBe(true);
+  });
+
   it.each([
     { maxPages: 1, expectedRows: 1, expectedQuantity: 2, expectedPnl: 1 },
     { maxPages: 2, expectedRows: 2, expectedQuantity: 10, expectedPnl: 5 },

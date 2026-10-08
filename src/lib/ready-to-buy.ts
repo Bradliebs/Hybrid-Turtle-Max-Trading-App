@@ -65,17 +65,42 @@ export interface OpenPositionForCluster {
 
 /** Snapshot age analysis */
 export interface SnapshotAge {
-  /** Hours since last snapshot */
+  /** Wall-clock hours since last snapshot */
   hours: number;
-  /** >48 hours — show amber warning */
+  /** >48 weekday hours — show amber warning */
   stale: boolean;
-  /** >7 days — show red warning, block buys */
+  /** >7 weekday days — show red warning, block buys */
   critical: boolean;
   /** Human-readable age description */
   label: string;
 }
 
 // ── Pure Functions ────────────────────────────────────────────
+
+function getWeekdayHoursBetween(start: Date, end: Date): number {
+  if (end.getTime() < start.getTime()) {
+    return (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+  }
+
+  let cursor = start.getTime();
+  let elapsedMs = 0;
+  while (cursor < end.getTime()) {
+    const current = new Date(cursor);
+    const nextUtcDay = Date.UTC(
+      current.getUTCFullYear(),
+      current.getUTCMonth(),
+      current.getUTCDate() + 1
+    );
+    const boundary = Math.min(nextUtcDay, end.getTime());
+    const day = current.getUTCDay();
+    if (day !== 0 && day !== 6) {
+      elapsedMs += boundary - cursor;
+    }
+    cursor = boundary;
+  }
+
+  return elapsedMs / (1000 * 60 * 60);
+}
 
 /**
  * Filter cross-ref tickers to only those whose current price >= entry trigger.
@@ -119,24 +144,25 @@ export function filterTriggerMet(tickers: CrossRefTicker[]): TriggerMetCandidate
 /**
  * Calculate how old the snapshot data is and classify staleness.
  * Thresholds:
- *   - Fresh: < 48 hours
- *   - Stale: 48h–7 days (amber warning)
- *   - Critical: > 7 days (red warning, discourage buying)
+ *   - Fresh: < 48 weekday hours
+ *   - Stale: 48h–7 weekday days (amber warning)
+ *   - Critical: > 7 weekday days (red warning, discourage buying)
+ * The displayed age remains wall-clock time.
  */
-export function getSnapshotAge(cachedAt: string | null): SnapshotAge {
+export function getSnapshotAge(cachedAt: string | null, now: Date = new Date()): SnapshotAge {
   if (!cachedAt) {
     return { hours: Infinity, stale: true, critical: true, label: 'No snapshot data' };
   }
 
-  const now = Date.now();
-  const cached = new Date(cachedAt).getTime();
-  if (isNaN(cached)) {
+  const cached = new Date(cachedAt);
+  if (isNaN(cached.getTime())) {
     return { hours: Infinity, stale: true, critical: true, label: 'Invalid date' };
   }
 
-  const hours = (now - cached) / (1000 * 60 * 60);
-  const stale = hours > 48;
-  const critical = hours > 168; // 7 days
+  const hours = (now.getTime() - cached.getTime()) / (1000 * 60 * 60);
+  const weekdayHours = getWeekdayHoursBetween(cached, now);
+  const stale = weekdayHours > 48;
+  const critical = weekdayHours > 168; // 7 weekdays
 
   let label: string;
   if (hours < 1) {

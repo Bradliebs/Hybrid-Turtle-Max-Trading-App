@@ -42,6 +42,7 @@ import { syncClosedPositions } from '@/lib/position-sync';
 import type { PositionSyncResult } from '@/lib/position-sync';
 import { syncSnapshot } from '@/lib/snapshot-sync';
 import { detectLaggards } from '@/lib/laggard-detector';
+import { computeCapitalAdjustedDrawdown, fromFirstBrokerSnapshot, loadCapitalEvents, UNEXPLAINED_STEP_PCT } from '@/lib/capital-adjusted-drawdown';
 import { rankActions, type AcceleratorContext, type HeldPosition, type ReadyCandidate as AcceleratorCandidate } from '@/lib/profit-accelerator';
 import { detectBreakoutFailures } from '@/lib/breakout-failure-detector';
 import type { BreakoutFailureResult } from '@/lib/breakout-failure-detector';
@@ -1346,20 +1347,24 @@ async function runNightlyProcess() {
       // may be stale; user-facing chart filters this source out.
       await recordEquitySnapshot(userId, equity, openRiskPercent, 'NIGHTLY');
 
-      // Equity drawdown alert: warn if equity drops >5% from all-time peak
+      // Equity drawdown alert: warn if trading performance is >5% below its peak.
+      // Measured on a capital-adjusted index so deposits/withdrawals are not losses.
       try {
-        const peakSnapshot = await prisma.equitySnapshot.findFirst({
-          where: { userId },
-          orderBy: { equity: 'desc' },
-          select: { equity: true, capturedAt: true },
-        });
-        if (peakSnapshot && peakSnapshot.equity > 0 && equity < peakSnapshot.equity) {
-          const drawdownPct = ((peakSnapshot.equity - equity) / peakSnapshot.equity) * 100;
-          if (drawdownPct >= 5) {
-            const peakDate = peakSnapshot.capturedAt.toISOString().split('T')[0];
-            alerts.push(`⚠️ Equity drawdown: ${drawdownPct.toFixed(1)}% below peak £${peakSnapshot.equity.toFixed(2)} (${peakDate}). Current: £${equity.toFixed(2)}. Consider CAPITAL_PRESERVATION mode.`);
-            log.warn('Equity drawdown alert', { drawdownPct: drawdownPct.toFixed(1), peak: peakSnapshot.equity, current: equity });
-          }
+        const [history, capitalEvents] = await Promise.all([
+          prisma.equitySnapshot.findMany({
+            where: { userId },
+            orderBy: { capturedAt: 'asc' },
+            select: { equity: true, capturedAt: true, source: true },
+          }),
+          loadCapitalEvents(),
+        ]);
+        const { currentDrawdownPct: drawdownPct, lastStepPct } = computeCapitalAdjustedDrawdown(fromFirstBrokerSnapshot(history), capitalEvents);
+        if (lastStepPct != null && lastStepPct <= UNEXPLAINED_STEP_PCT) {
+          alerts.push(`⚠️ Equity fell ${Math.abs(lastStepPct).toFixed(1)}% since the last snapshot with no recorded deposit or withdrawal. If money was withdrawn, refresh capital events (scripts/collect-cash-transactions.ts) or drawdown figures will treat it as a loss.`);
+        }
+        if (drawdownPct >= 5) {
+          alerts.push(`⚠️ Trading drawdown: ${drawdownPct.toFixed(1)}% below the performance peak (deposits and withdrawals excluded). Current equity: £${equity.toFixed(2)}. Consider CAPITAL_PRESERVATION mode.`);
+          log.warn('Equity drawdown alert', { drawdownPct: drawdownPct.toFixed(1), current: equity, capitalEvents: capitalEvents.length });
         }
       } catch (err) {
         console.warn('  [6] Equity drawdown check failed:', (err as Error).message);

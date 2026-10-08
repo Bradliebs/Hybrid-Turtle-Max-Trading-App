@@ -7,6 +7,7 @@
  * Notes: Phase 10 active-alert projection and sync layer.
  */
 import prisma from '@/lib/prisma';
+import { computeCapitalAdjustedDrawdown, fromFirstBrokerSnapshot, loadCapitalEvents } from '@/lib/capital-adjusted-drawdown';
 import { sendAlert, type AlertPriority, type NotificationType } from '@/lib/alert-service';
 import { getStopDashboardData } from '../../packages/stops/src';
 import { getAccountRiskState } from '../../packages/risk/src/account-state';
@@ -65,41 +66,28 @@ function parseViolationCount(ruleViolationsJson: unknown): number {
 }
 
 async function getDrawdownState() {
-  const [user, snapshots] = await Promise.all([
+  const [user, snapshots, capitalEvents] = await Promise.all([
     prisma.user.findUnique({
       where: { id: 'default-user' },
-      select: { equity: true, startingEquityOverride: true },
+      select: { equity: true },
     }),
     prisma.equitySnapshot.findMany({
       orderBy: { capturedAt: 'asc' },
-      select: { equity: true, capturedAt: true },
+      select: { equity: true, capturedAt: true, source: true },
     }),
+    loadCapitalEvents(),
   ]);
 
-  const series = snapshots.map((snapshot) => ({
-    equity: snapshot.equity,
-    capturedAt: snapshot.capturedAt,
-  }));
-
-  if (series.length === 0 && user?.equity == null) {
-    return { drawdownPct: null as number | null, updatedAt: null as string | null };
+  const history = fromFirstBrokerSnapshot(snapshots);
+  if (history.length === 0) {
+    return { drawdownPct: user?.equity == null ? null as number | null : 0, updatedAt: null as string | null };
   }
 
-  const peak = Math.max(
-    ...(series.map((snapshot) => snapshot.equity)),
-    user?.startingEquityOverride ?? Number.NEGATIVE_INFINITY,
-    user?.equity ?? Number.NEGATIVE_INFINITY,
-  );
-
-  const currentEquity = series.length > 0 ? series[series.length - 1].equity : (user?.equity ?? null);
-  if (currentEquity == null || !Number.isFinite(peak) || peak <= 0) {
-    return { drawdownPct: null as number | null, updatedAt: series.at(-1)?.capturedAt.toISOString() ?? null };
-  }
-
-  const drawdownPct = ((currentEquity - peak) / peak) * 100;
+  // Capital-adjusted: deposits and withdrawals move equity but are not trading losses.
+  const { currentDrawdownPct } = computeCapitalAdjustedDrawdown(history, capitalEvents);
   return {
-    drawdownPct,
-    updatedAt: series.at(-1)?.capturedAt.toISOString() ?? null,
+    drawdownPct: -currentDrawdownPct,
+    updatedAt: history.at(-1)?.capturedAt.toISOString() ?? null,
   };
 }
 
@@ -213,7 +201,7 @@ export async function getActiveSafetyAlerts(): Promise<SafetyAlertSnapshot> {
         'EXCESSIVE_DRAWDOWN',
         drawdownState.drawdownPct <= CRITICAL_DRAWDOWN_THRESHOLD_PCT ? 'CRITICAL' : 'WARNING',
         'Excessive drawdown',
-        `Account equity is ${Math.abs(drawdownState.drawdownPct).toFixed(1)}% below the recorded peak. Review exposure and new-trade activity.`,
+        `Trading performance is ${Math.abs(drawdownState.drawdownPct).toFixed(1)}% below its peak (deposits and withdrawals excluded). Review exposure and new-trade activity.`,
         1,
         '/portfolio/positions',
         drawdownState.updatedAt,

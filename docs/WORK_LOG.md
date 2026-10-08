@@ -1366,3 +1366,54 @@ is a breaking Tailwind v4 migration. It is reached only through build-time
 globbing of our own config, so it is allowlisted in the new
 `scripts/ci-audit.mjs`. CI fails again after 2027-01-05 so the exception is
 reviewed. Any other high or critical advisory still fails CI.
+
+## 2026-10-08 Trade logic efficiency review (with Claude Sonnet 5.5)
+
+The user asked whether the trading logic is working and efficient, judged from
+trade history, and what successful traders do. Two review rounds with Claude
+Sonnet 5.5. Full findings are in
+[the review](../reports/trade-logic-efficiency-review-2026-10-08.md).
+
+- **Results:** auto-trade buys average −0.40R (n=19). Their interval just
+  excludes zero; pooled with manual trades it does not.
+- **Losses:** most are breakouts that fail within days. Acting on the existing
+  failed-breakout flag would have helped 7 of 8 faithful real trades (+0.33R),
+  but scored −0.08R in the development simulation. It is now a frozen forward
+  test (`FAILX`); the earliest conclusion is about February 2027.
+- **Entry timing:** a replay of the real buys explains little of the gap;
+  next-open entries helped 9 of 21.
+- **Sizing:** the 20% notional cap binds, so risk per trade is 0.6–2.0% and
+  grows with volatility.
+- **Equity:** July–August falls look like withdrawals [unverified]. They keep
+  the nightly drawdown alert, the CRITICAL drawdown alert and the evidence
+  verdict permanently on.
+- **Research tools:** `yahoo_daily.py` (the app's listing mapping),
+  `shadow_sim.py` (shared exit engine), `live_entry_replay.py` and
+  `failed_breakout_exit_review.py`. `prospective_shadow_tests.py` priced mapped
+  tickers from the wrong listing; that is fixed.
+
+No live behaviour changed. Decisions N1–N5 are in the review.
+
+### Decisions applied (same day, owner approved all recommendations)
+- **Nine-month view:** the trade log (139 sells since 15 January) shows −£42
+  realised. AutoInvest liquidation was in January, API trades from March to
+  May made +£48, everything since June −£73. Lifetime of the account: £1,023
+  deposited, £744.28 withdrawn, about −£68.
+- **Withdrawals confirmed** with a read-only Trading 212 cash-history fetch
+  (2 requests; new `scripts/collect-cash-transactions.ts`, guarded like the
+  reconciliation collector). They are stored in `AppSetting` `capital-events.v1`
+  after a database backup.
+- **New `src/lib/capital-adjusted-drawdown.ts`** (time-weighted index) feeds
+  the nightly alert, the alerts page, the equity-curve card and the evidence
+  verdict.
+  - Trading drawdown is about 13%, not 79%, so the alert is now a WARNING.
+  - The card shows trading change and withdrawals separately.
+  - A 5%+ one-step fall with no recorded cash movement prompts a refresh.
+  - Every drawdown consumer starts at the first broker snapshot (seed-row guard).
+  - Refresh the events after any deposit or withdrawal.
+- **Sizing:** tested, not changed (stop width does not predict R).
+- **`ready-to-buy.ts`:** the weekday-hours change is kept; it is manual-panel
+  only.
+- **Restart check** added to `prospective_shadow_tests.py`: LIVE alone, one entry per ticker per 56 days, at least 30 candidates on 15 dates and 15 tickers, 95% lower bound above zero.
+- **New recommendation, needs owner decision:** pause new buys with
+  CAPITAL_PRESERVATION until the restart check passes.

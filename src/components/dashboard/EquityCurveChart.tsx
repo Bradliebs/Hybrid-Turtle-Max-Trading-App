@@ -26,6 +26,11 @@ interface EquitySummary {
   currentEquity: number;
   change: number;
   changePct: number;
+  /** Deposits minus withdrawals inside the window (GBP) */
+  netCashFlow?: number;
+  /** Equity change excluding deposits and withdrawals */
+  tradingChange?: number;
+  tradingChangePct?: number;
   maxDrawdownPct: number;
   snapshotCount: number;
   days: number;
@@ -78,7 +83,10 @@ export default function EquityCurveChart() {
     );
   }
 
-  const isPositive = summary && summary.change >= 0;
+  const tradingChange = summary?.tradingChange ?? summary?.change ?? 0;
+  const tradingChangePct = summary?.tradingChangePct ?? summary?.changePct ?? 0;
+  const isPositive = tradingChange >= 0;
+  const cashFlow = summary?.netCashFlow ?? 0;
 
   return (
     <div className="card-surface p-4">
@@ -114,11 +122,16 @@ export default function EquityCurveChart() {
             <div className="text-sm font-mono font-semibold">£{summary.currentEquity.toFixed(2)}</div>
           </div>
           <div>
-            <div className="text-[10px] text-muted-foreground">Change</div>
+            <div className="text-[10px] text-muted-foreground">Trading change</div>
             <div className={cn('text-sm font-mono font-semibold flex items-center gap-1', isPositive ? 'text-profit' : 'text-loss')}>
               {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-              {isPositive ? '+' : ''}£{summary.change.toFixed(2)} ({summary.changePct >= 0 ? '+' : ''}{summary.changePct.toFixed(1)}%)
+              {isPositive ? '+' : '−'}£{Math.abs(tradingChange).toFixed(2)} ({tradingChangePct >= 0 ? '+' : ''}{tradingChangePct.toFixed(1)}%)
             </div>
+            {Math.abs(cashFlow) >= 0.01 && (
+              <div className="text-[10px] text-muted-foreground">
+                {cashFlow < 0 ? 'Withdrawn' : 'Deposited'} £{Math.abs(cashFlow).toFixed(2)} (not counted)
+              </div>
+            )}
           </div>
           <div>
             <div className="text-[10px] text-muted-foreground">Max DD</div>

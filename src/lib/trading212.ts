@@ -205,6 +205,15 @@ export interface T212OrderHistoryOptions {
   maxPages?: number;
 }
 
+/** A cash movement from GET /equity/history/transactions. */
+export interface T212CashTransaction {
+  type: 'WITHDRAW' | 'DEPOSIT' | 'FEE' | 'TRANSFER' | 'INTEREST_ON_FREE_CASH' | 'LENDING_INTEREST' | string;
+  amount: number;
+  currency?: string;
+  dateTime: string;
+  reference?: string;
+}
+
 // ---- API Client ----
 
 /**
@@ -539,6 +548,25 @@ export class Trading212Client {
     }
 
     return allOrders;
+  }
+
+  /**
+   * Fetch cash movements (deposits, withdrawals, fees, interest) with pagination.
+   * Read-only. Rate limit: 20 req / 1min. Needs the history:transactions API scope.
+   */
+  async getCashTransactions(limit: number = 50, options: T212OrderHistoryOptions = {}): Promise<T212CashTransaction[]> {
+    const all: T212CashTransaction[] = [];
+    let nextPath: string | null = `/equity/history/transactions?limit=${limit}`;
+    const maxPages = options.maxPages ?? Number.POSITIVE_INFINITY;
+    let pagesFetched = 0;
+    while (nextPath && pagesFetched < maxPages) {
+      const page: T212PaginatedResponse<T212CashTransaction> = await this.request(nextPath);
+      pagesFetched++;
+      all.push(...page.items);
+      const raw = page.nextPagePath;
+      nextPath = raw && pagesFetched < maxPages ? (raw.startsWith('/api/v0') ? raw.replace('/api/v0', '') : raw) : null;
+    }
+    return all;
   }
 
   // ---- Orders ----
