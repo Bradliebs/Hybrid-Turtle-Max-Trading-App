@@ -30,9 +30,25 @@ Exit variants (N3; m is the trailing multiple used everywhere in the variant):
   W20    same with m = 2.0 (the design before commit 4280812)
   LATE   m = 1.5, but the trail starts only after a close at or above +1R
   CHAND  highest high of the last 22 sessions - 3 x ATR(22), from the entry day
+  FAILX  LIVE, plus the app's breakout-failure rule acted on: within 5 calendar days
+         of entry, a close below the entry trigger with under +0.5R open profit
+         sells at the next session's open
+
+Amendment 2026-10-08 (before any prospective outcome existed; the first 40-session
+window ends in December): FAILX added, Bonferroni widened from six to seven
+comparisons, and prices now come from the live listing via yahoo_daily.to_yahoo
+(the first version ignored the app's ticker map, e.g. SAP -> SAP.DE). Later the
+same day: a restart check was added for the owner's pause decision. It reports
+the current rules (LIVE) on their own, counting each ticker at most once per 56
+calendar days (overlapping repeats are near-duplicates), with a 95%
+date-bootstrap interval. Buying resumes only if the lower bound is above zero
+with at least 30 such candidates on 15 dates and 15 tickers. It is a
+stand-alone check, not one of the seven. It covers every A-grade candidate, not
+only the ones auto-trade would have bought. A variant (e.g. FAILX) is not a
+resume signal on its own; it must first pass its E1 gate and be adopted.
 
 Tests and evidence gates. Intervals resample whole signal dates and are
-Bonferroni-corrected for the six comparisons (99.17% two-sided, i.e. 0.05 / 6):
+Bonferroni-corrected for the seven comparisons (99.29% two-sided, i.e. 0.05 / 7):
   E1 exits: variant R minus LIVE R per candidate, over every completed candidate.
      (Variants can differ even on trades that never rise: the live trail uses the
      current ATR, so a falling ATR tightens it with no price gain.) Gate: at least
@@ -61,20 +77,21 @@ The --smoke option replays a past window to check the code runs. Its output is
 labelled SMOKE and is not evidence.
 """
 import datetime as dt
-import json
 import sqlite3
 import sys
 import time
-import urllib.request
 
 import numpy as np
 import pandas as pd
+
+from shadow_sim import atr, fetch, simulate
+from yahoo_daily import to_yahoo
 
 FREEZE = dt.date(2026, 10, 6)
 HORIZON = 40
 MIN_N, MIN_DATES = 30, 15
 BOOTSTRAPS = 4000
-TAIL = 100 * 0.05 / 6 / 2  # Bonferroni: six comparisons, two-sided
+TAIL = 100 * 0.05 / 7 / 2  # Bonferroni: seven comparisons, two-sided
 
 args = [a for a in sys.argv[1:] if not a.startswith('--')]
 DB = args[0] if args else 'prisma/dev.db'
@@ -84,78 +101,27 @@ start, end = (dt.date.fromisoformat(args[1]), dt.date.fromisoformat(args[2])) if
 con = sqlite3.connect(f'file:{DB}?mode=ro', uri=True)
 con.execute('PRAGMA query_only = ON')
 rows = pd.read_sql("""
-  select st.ticker, coalesce(st.yahooTicker, st.ticker) as symbol, sc.runDate, sr.status,
+  select st.ticker, st.yahooTicker, sc.runDate, sr.status,
          sr.rankScore, sr.ncs, sr.entryTrigger
   from ScanResult sr join Scan sc on sc.id = sr.scanId join Stock st on st.id = sr.stockId
   where sr.grade = 'A_GRADE_BUY'""", con)
+# Same listing as the live system (toYahooTicker); amended 2026-10-08, before any prospective outcome existed.
+rows['symbol'] = [to_yahoo(t, o) for t, o in zip(rows.ticker, rows.yahooTicker)]
 rows['time'] = pd.to_datetime(pd.to_numeric(rows.runDate, errors='coerce'), unit='ms', utc=True)
 rows['date'] = rows.time.dt.date
 rows = rows[(rows.date >= start) & ((rows.date <= end) if end else True)]
 rows = rows.sort_values('time').drop_duplicates(['ticker', 'date'], keep='first').reset_index(drop=True)
 
 
-def fetch(symbol, first_day):
-    begin = int(dt.datetime.combine(first_day - dt.timedelta(days=45), dt.time(), dt.UTC).timestamp())
-    url = (f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d'
-           f'&period1={begin}&period2={int(time.time())}')
-    request = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    with urllib.request.urlopen(request, timeout=20) as response:
-        result = json.load(response)['chart']['result'][0]
-    quote = result['indicators']['quote'][0]
-    bars = pd.DataFrame({'open': quote['open'], 'high': quote['high'], 'low': quote['low'], 'close': quote['close'],
-                         'adj': result['indicators'].get('adjclose', [{}])[0].get('adjclose', quote['close'])},
-                        index=pd.to_datetime(result['timestamp'], unit='s', utc=True).date).dropna()
-    return bars[~bars.index.duplicated(keep='last')]
 
 
-def atr(bars, end_index, length):
-    window = bars.iloc[end_index - length:end_index + 1]
-    previous = window.close.shift(1)
-    true_range = np.maximum(window.high - window.low,
-                            np.maximum((window.high - previous).abs(), (window.low - previous).abs()))
-    return true_range.iloc[1:].mean()
-
-
-def simulate(bars, entry_index, entry_price, risk, variant):
-    """R multiple of one trade, or None while the window is incomplete."""
-    m = 2.0 if variant == 'W20' else 1.5
-    stop = entry_price - risk
-    highest = entry_price
-    last = entry_index + HORIZON - 1
-    if last >= len(bars):
-        return None
-    for i in range(entry_index, last + 1):
-        bar = bars.iloc[i]
-        if i > entry_index and bar.open <= stop:
-            return (bar.open - entry_price) / risk
-        if bar.low <= stop:
-            return (stop - entry_price) / risk
-        highest = max(highest, bar.close)
-        r_close = (bar.close - entry_price) / risk
-        current_atr = atr(bars, i, 14)
-        if variant == 'CHAND':
-            trail = bars.high.iloc[max(0, i - 21):i + 1].max() - 3 * atr(bars, i, 22)
-        elif variant == 'LATE' and (highest - entry_price) / risk < 1:
-            trail = -np.inf
-        else:
-            trail = highest - m * current_atr
-        ladder = -np.inf
-        if r_close >= 3:
-            ladder = max(entry_price + risk, bar.close - m * current_atr)
-        elif r_close >= 2.5:
-            ladder = entry_price + 0.5 * risk
-        elif r_close >= 1.5:
-            ladder = entry_price
-        stop = max(stop, trail, ladder)
-    return (bars.close.iloc[last] - entry_price) / risk
-
-
-def date_bootstrap(frame, column):
+def date_bootstrap(frame, column, tail=None):
     days = frame.date.unique()
     groups = {day: part[column].to_numpy() for day, part in frame.groupby('date')}
     rng = np.random.default_rng(20261005)
     means = [np.concatenate([groups[d] for d in rng.choice(days, len(days))]).mean() for _ in range(BOOTSTRAPS)]
-    return np.percentile(means, [TAIL, 100 - TAIL])
+    cut = TAIL if tail is None else tail
+    return np.percentile(means, [cut, 100 - cut])
 
 
 def verdict(frame, column, n_needed, dates_needed):
@@ -194,8 +160,8 @@ for row in rows.itertuples():
     entry_index = signal_index + 1
     entry = bars.open.iloc[entry_index]
     record = {'ticker': row.ticker, 'date': row.date, 'status': row.status, 'rankScore': row.rankScore, 'ncs': row.ncs}
-    for variant in ('LIVE', 'W20', 'LATE', 'CHAND'):
-        record[variant] = simulate(bars, entry_index, entry, risk, variant)
+    for variant in ('LIVE', 'W20', 'LATE', 'CHAND', 'FAILX'):
+        record[variant] = simulate(bars, entry_index, entry, risk, variant, row.entryTrigger)
     last = entry_index + HORIZON - 1
     record['bestR'] = None if last >= len(bars) else (bars.close.iloc[entry_index:last + 1].max() - entry) / risk
     # Score S3 only once the latest possible pullback (fill on session 5) has a full window.
@@ -214,13 +180,34 @@ df = pd.DataFrame(results)
 done = df.dropna(subset=['LIVE']) if len(df) else df
 print(f'Completed {len(done)}, pending {len(df) - len(done)}, excluded {len(excluded)}')
 if len(done):
-    for variant in ('LIVE', 'W20', 'LATE', 'CHAND', 'PULLBACK'):
+    for variant in ('LIVE', 'W20', 'LATE', 'CHAND', 'FAILX', 'PULLBACK'):
         values = done[variant].dropna()
         print(f'  {variant:<8} mean {values.mean():+.2f}R  win {100 * (values > 0).mean():.0f}%  n={len(values)}')
 
+print('\nRestart check (not part of the corrected family): current rules (LIVE) on their own')
+# Overlapping repeats of one stock (A-grade on consecutive days, 40-session trades)
+# are near-duplicates, so count each ticker at most once per 56 calendar days.
+kept, last_seen = [], {}
+for row in (done.sort_values('date').itertuples() if len(done) else []):
+    previous = last_seen.get(row.ticker)
+    if previous is None or (row.date - previous).days > 56:
+        kept.append(row.Index)
+        last_seen[row.ticker] = row.date
+independent = done.loc[kept] if kept else done.iloc[0:0]
+if len(independent):
+    low, high = date_bootstrap(independent, 'LIVE', tail=2.5)
+    enough = (len(independent) >= MIN_N and independent.date.nunique() >= MIN_DATES
+              and independent.ticker.nunique() >= MIN_DATES)
+    state = ('RESUME BUYING SUPPORTED' if low > 0 else 'KEEP PAUSED') if enough else 'INSUFFICIENT EVIDENCE'
+    print(f'  LIVE mean {independent.LIVE.mean():+.2f}R, 95% date-bootstrap interval [{low:+.2f}, {high:+.2f}], '
+          f'n={len(independent)} independent of {len(done)}, dates={independent.date.nunique()}, '
+          f'tickers={independent.ticker.nunique()} -> {state}')
+else:
+    print('  INSUFFICIENT EVIDENCE (no completed candidates)')
+
 print('\nE1 exits (every completed candidate):')
 eligible = done
-for variant in ('W20', 'LATE', 'CHAND'):
+for variant in ('W20', 'LATE', 'CHAND', 'FAILX'):
     frame = eligible.assign(diff=eligible[variant] - eligible.LIVE) if len(eligible) else eligible
     print(f'  {variant} minus LIVE: {verdict(frame, "diff", MIN_N, MIN_DATES) if len(frame) else "INSUFFICIENT EVIDENCE"}')
 
