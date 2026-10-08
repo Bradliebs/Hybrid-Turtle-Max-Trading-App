@@ -76,6 +76,7 @@ import { acquireAutoTradeLock, releaseAutoTradeLock, AutoTradeLockContentionErro
 import { getHistoricalFill, recoverTimedOutBuy } from '@/lib/buy-timeout-recovery';
 import { readJevGateConfig, partitionEtfOnly, partitionJevVerdicts, jevLogPhase, type JevVerdict } from '@/lib/auto-trade-filters';
 import { brokerListingMismatch, isUsPriceListing } from '@/lib/listing-identity';
+import { exitAutoEnabled, runFailedBreakoutExits, terminalAttempts } from '@/lib/failed-breakout-exit';
 import { toYahooTicker } from '@/lib/ticker-maps';
 
 // ── Configuration ────────────────────────────────────────────
@@ -1266,6 +1267,54 @@ async function runAutoTrade(session: Session) {
     console.error('  ✗ User not found');
     await prisma.$disconnect();
     return;
+  }
+
+  // ── Step 0: Failed-breakout exits (sells only) ──
+  // Runs before the operating-mode gate so CAPITAL_PRESERVATION ("manage and
+  // exit only") still exits; after the weekend, holiday and kill-switch gates.
+  if (session !== 'scan' && exitAutoEnabled()) {
+    const exitClients = new Map<string, Promise<Trading212Client>>();
+    const exitClient = (accountType: string | null) => {
+      const key = accountType ?? 'invest';
+      if (!exitClients.has(key)) exitClients.set(key, getT212Client(userId, key as T212AccountType));
+      return exitClients.get(key)!;
+    };
+    const exits = await runFailedBreakoutExits(session, {
+      positions: () => prisma.position.findMany({
+        where: { userId, status: 'OPEN' },
+        select: { id: true, t212Ticker: true, accountType: true, source: true, shares: true, breakoutFailureDetectedAt: true,
+          stock: { select: { ticker: true } } },
+      }).then(rows => rows.map(row => ({ ...row, ticker: row.stock.ticker }))),
+      attemptedPositionIds: async () => {
+        const logs = await prisma.executionLog.findMany({
+          where: { phase: { startsWith: 'FAILED_BREAKOUT_EXIT' }, createdAt: { gte: new Date(Date.now() - 7 * 86_400_000) } },
+          orderBy: { createdAt: 'asc' },
+          select: { requestBody: true, phase: true },
+        });
+        const parsed: Array<{ positionId: string; phase: string }> = [];
+        for (const log of logs) {
+          try {
+            const id = JSON.parse(log.requestBody)?.positionId;
+            if (typeof id === 'string') parsed.push({ positionId: id, phase: log.phase });
+          } catch { /* not ours */ }
+        }
+        return terminalAttempts(parsed);
+      },
+      brokerQuantity: async (position) => (await exitClient(position.accountType)).heldQuantity(position.t212Ticker!),
+      sell: async (position, quantity) => {
+        const client = await exitClient(position.accountType);
+        const { order, soldQuantity, remainingQuantity } = await client.sellAtMarket(position.t212Ticker!, quantity);
+        return { orderId: order?.id ?? null, sold: soldQuantity, remaining: remainingQuantity };
+      },
+      record: (position, outcome) => logExecution({
+        ticker: position.ticker, phase: outcome.phase,
+        orderId: outcome.orderId != null ? String(outcome.orderId) : null,
+        requestBody: JSON.stringify({ positionId: position.id, t212Ticker: position.t212Ticker, quantity: outcome.quantity ?? null }),
+        quantity: outcome.quantity ?? null, accountType: position.accountType ?? 'invest', error: outcome.error ?? null,
+      }),
+      notify: (text) => sendTelegramMessage({ text }).then(() => undefined),
+    });
+    if (exits.length > 0) console.log(`  [exit] Failed-breakout exits: ${exits.map(e => `${e.ticker} ${e.status}`).join(', ')}`);
   }
 
   // ── Gate 3a: Operating mode check ──

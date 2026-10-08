@@ -795,6 +795,106 @@ export class Trading212Client {
     }
   }
 
+  /** Shares held for a ticker on this account (0 if none). Uses the full positions list. */
+  async heldQuantity(t212Ticker: string): Promise<number> {
+    const positions = await this.getPositions();
+    return positions
+      .filter(p => p.instrument?.ticker === t212Ticker)
+      .reduce((sum, p) => sum + Math.max(0, (p.quantity ?? 0) - (p.quantityInPies ?? 0)), 0);
+  }
+
+  /**
+   * Sell part or all of a holding at market, and confirm it happened.
+   * T212 reserves shares for a pending stop, so the ticker's sell stops are
+   * cancelled first. The sell counts only when the broker's holding has fallen;
+   * if it has not after the wait, the order is cancelled and the stop is put
+   * back. Any shares still held afterwards get a stop at the highest cancelled
+   * price. If protection cannot be restored the error says CRITICAL.
+   */
+  async sellAtMarket(
+    t212Ticker: string,
+    quantity: number,
+    options: { checks?: number; waitMs?: number } = {},
+  ): Promise<{ order: T212PendingOrder; soldQuantity: number; remainingQuantity: number }> {
+    if (!(quantity > 0)) throw new Trading212Error(`Sell quantity must be positive, got ${quantity}`, 400);
+    const checks = options.checks ?? 4;
+    const waitMs = options.waitMs ?? 5000;
+    const before = await this.heldQuantity(t212Ticker);
+    if (before + 1e-9 < quantity) {
+      throw new Trading212Error(`Cannot sell ${quantity} ${t212Ticker}: only ${before} held`, 400);
+    }
+    const pending = await this.getPendingOrders();
+    const stops = pending.filter(o => o.ticker === t212Ticker && o.type === 'STOP' && o.side === 'SELL');
+    const stopPrice = stops.reduce((max, o) => Math.max(max, o.stopPrice ?? 0), 0);
+    const cancelled: T212PendingOrder[] = [];
+
+    const protect = async (held: number, reason: string): Promise<string | null> => {
+      // Shares still covered by a stop that was not cancelled stay reserved; protect only the rest.
+      const covered = stops.filter(s => !cancelled.includes(s)).reduce((sum, s) => sum + Math.abs(s.quantity), 0);
+      const remaining = held - covered;
+      if (remaining <= 1e-9 || cancelled.length === 0) return null;
+      if (!(stopPrice > 0)) return `${reason}; no valid stop price to restore`;
+      try {
+        await this.placeStopOrder({ quantity: -remaining, stopPrice, ticker: t212Ticker, timeValidity: 'GOOD_TILL_CANCEL' });
+        return null;
+      } catch (error) {
+        return `${reason}; stop restore failed: ${(error as Error).message}`;
+      }
+    };
+
+    let order: T212PendingOrder;
+    try {
+      for (const stop of stops) {
+        await this.cancelOrder(stop.id);
+        cancelled.push(stop);
+        await new Promise(r => setTimeout(r, 250));
+      }
+      if (cancelled.length > 0) await new Promise(r => setTimeout(r, 500));
+      order = await this.placeMarketOrder({ quantity: -quantity, ticker: t212Ticker });
+    } catch (sellError) {
+      const restoreError = await protect(before, 'sell rejected');
+      const status = sellError instanceof Trading212Error ? sellError.statusCode : 500;
+      throw new Trading212Error(restoreError
+        ? `CRITICAL: market sell of ${t212Ticker} failed (${(sellError as Error).message}) and its stop could not be restored (${restoreError}). Check T212 immediately.`
+        : `Market sell of ${t212Ticker} failed: ${(sellError as Error).message}.${cancelled.length ? ' Stop protection was restored.' : ''}`,
+      status);
+    }
+
+    // Confirm: the holding must actually fall.
+    let held = before;
+    for (let i = 0; i < checks; i++) {
+      await new Promise(r => setTimeout(r, waitMs));
+      try { held = await this.heldQuantity(t212Ticker); } catch { continue; }
+      if (held <= before - quantity + 1e-6) break;
+    }
+    const sold = Math.max(0, before - held);
+    if (sold + 1e-6 < quantity) {
+      // Positions can lag a fill. An order that is no longer pending may have filled.
+      let stillPending = true;
+      try { await this.getOrder(order.id); } catch { stillPending = false; }
+      if (stillPending) {
+        try { await this.cancelOrder(order.id); } catch { /* may have filled meanwhile */ }
+      }
+      try { held = await this.heldQuantity(t212Ticker); } catch { /* keep last known */ }
+      if (before - held + 1e-6 >= quantity) {
+        const leftover = await protect(held, 'shares left after the sell');
+        if (leftover) throw new Trading212Error(`CRITICAL: sold ${before - held} ${t212Ticker} but ${held} remain without a stop (${leftover}). Check T212 immediately.`, 500);
+        return { order, soldQuantity: before - held, remainingQuantity: held };
+      }
+      const restoreError = await protect(held, 'sell not confirmed');
+      const maybeFilled = stillPending ? '' : ' The order is no longer pending, so it may have filled; verify in T212.';
+      throw new Trading212Error(restoreError
+        ? `CRITICAL: market sell of ${t212Ticker} was not confirmed (${Math.max(0, before - held)} of ${quantity} sold) and protection could not be restored (${restoreError}).${maybeFilled} Check T212 immediately.`
+        : `Market sell of ${t212Ticker} was not confirmed (${Math.max(0, before - held)} of ${quantity} sold); order cancelled and stop restored for the rest.${maybeFilled}`,
+      409);
+    }
+    const restoreError = await protect(held, 'shares left after the sell');
+    if (restoreError) {
+      throw new Trading212Error(`CRITICAL: sold ${sold} ${t212Ticker} but ${held} remain without a stop (${restoreError}). Check T212 immediately.`, 500);
+    }
+    return { order, soldQuantity: sold, remainingQuantity: held };
+  }
+
   /**
    * Remove all stop-loss orders for a ticker.
    */

@@ -1428,3 +1428,17 @@ interval +0.03 to +0.23, 531 trades). NCS ordering, FWS (reversed sign) and
 "breakouts underperform" did not hold. Every filter-passing candidate lost 3.2%
 on average in that period. The holdout is now seen. Decisions are in
 [the report](../reports/holdout-test-2026-10-08.md).
+
+### Failed-breakout auto-exit (same day, owner approved)
+The one change that passed the holdout is live: an auto-trade position whose
+breakout fails (a close back below the trigger within 5 days, under +0.5R) is
+sold at the first session after the nightly flag.
+- It only runs during regular hours, sells only the position's own shares,
+  confirms the sale, and restores the stop if the sale isn't confirmed.
+- New `src/lib/failed-breakout-exit.ts` and `Trading212Client.sellAtMarket` /
+  `heldQuantity`; Step 0 in `src/cron/auto-trade.ts`.
+- The nightly detector no longer flags a position without a live price.
+- Two review rounds with Claude Sonnet 5.5: the three P1s were fixed before
+  release, and the second round said "Safe to ship: YES".
+- The other holdout ideas (NCS ordering, FWS, waiting for pullbacks) were not
+  adopted, because they didn't hold on untouched data.

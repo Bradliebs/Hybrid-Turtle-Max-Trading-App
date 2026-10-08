@@ -540,6 +540,30 @@ Fed into `calcDualRegimeScore()` (§7) as the `vol_regime` field, affecting BQS 
 
 ## 9. Exit Signals
 
+### Failed-Breakout Exit (automatic)
+
+**Source:** `src/lib/breakout-failure-detector.ts` (nightly flag) and
+`src/lib/failed-breakout-exit.ts` (sell at the next session, called from
+`src/cron/auto-trade.ts`).
+
+* **Flag (nightly, after the close):** `daysHeld ≤ 5`, close below the entry
+  trigger and `rMultiple < 0.5`.
+* **Sell:** at the first auto-trade session in that position's market (UK
+  sessions for `.L`, US sessions for US listings), for auto-trade positions only.
+  * The session must be inside regular hours (US 09:35–15:55 New York, UK
+    08:05–16:25 London).
+  * The flag must have been recorded after the market's close, within the last
+    4 days.
+  * It sells the position's own shares, then confirms the broker holding fell.
+    If it didn't, the order is cancelled and the stop restored. Any other shares
+    keep a stop.
+  * A ticker held by two open positions is skipped.
+* **Runs in every operating mode,** including CAPITAL_PRESERVATION, but not
+  when the kill switch blocks automated submissions. Turn it off with
+  `FAILED_BREAKOUT_AUTO_EXIT=off`.
+* **Evidence:** +0.13R per breakout trade on untouched August–September 2026
+  data (`reports/holdout-test-2026-10-08.md`).
+
 ### Laggard Detector
 
 **Source:** `src/lib/laggard-detector.ts`

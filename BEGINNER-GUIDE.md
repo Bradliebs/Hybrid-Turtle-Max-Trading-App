@@ -360,6 +360,15 @@ Stops **only ever go up**. As a trade gains, the stop climbs:
 | +2.5R | Buy price + 0.5R (some profit locked in) |
 | +3R and up | At least buy price + 1R, then trailing below the price as it rises |
 
+**Failed breakouts are sold early.** If an automatic buy falls back below its
+breakout price within 5 days (and is up less than half its risk), the app sells
+it at the start of the next trading session instead of waiting for the stop.
+The evening check spots these, and the sale happens the next morning (UK
+shares) or just after the US open (US shares). You get a Telegram message
+either way. This rule was tested on months of history the app hadn't seen
+before, and it cut losses. It only applies to the app's own buys, never to
+shares you bought yourself.
+
 ### 10.5 Spreading risk
 
 To stop one bad week hurting too much, the app also limits:

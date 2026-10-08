@@ -32,6 +32,22 @@ Each entry uses this shape (newest at top of the History section):
 
 ## History
 
+### 2026-10-08 - pending - auto-trade.ts: sell failed breakouts automatically
+
+- File(s): `src/cron/auto-trade.ts` (new Step 0 before the operating-mode gate; one import). New `src/lib/failed-breakout-exit.ts` (selection and runner) and `Trading212Client.sellAtMarket` in `src/lib/trading212.ts` (cancel the sell stops, market sell, restore the stops if the sell fails, CRITICAL if the restore fails too).
+- Why: Owner approved on 2026-10-08 after a one-time holdout test (`reports/holdout-test-2026-10-08.md`). Selling at the next session after the nightly failed-breakout flag improved breakout trades by +0.13R (99% interval +0.03 to +0.23, 531 trades) on untouched August–September data, consistent with 7 of 8 real auto-trade cases.
+- Behaviour: At the start of each trading session (after the weekend, holiday and kill-switch gates; before the operating-mode gate, so CAPITAL_PRESERVATION still exits), it sells auto-trade positions whose failed-breakout flag was recorded after that market's close in the last 4 days.
+  - It only sells during the market's regular hours (US 09:35–15:55 New York, UK 08:05–16:25 London) and only in that market's sessions.
+  - It sells the position's own shares (the smaller of its shares and the broker holding). It skips a ticker that another open position also holds.
+  - The sell cancels the ticker's sell stops and places a market sell. It then confirms the broker holding fell; if it did not, it cancels the order and restores the stop. Any shares still held get a stop at the highest cancelled price. If protection can't be restored, the error says CRITICAL.
+  - Attempts are logged to ExecutionLog: INTENT before the sell, then SOLD, NOT_HELD, SKIPPED_SHARED, ERROR or CRITICAL. An ordinary error is retried once; an INTENT with no outcome is never retried.
+  - Every attempt is reported on Telegram (HTML-escaped). Manual positions are never sold. Off switch: `FAILED_BREAKOUT_AUTO_EXIT=off`.
+  - The nightly detector no longer flags a position when its live price is missing (it used to fall back to the entry price), in `src/cron/nightly.ts` and `src/app/api/nightly/route.ts`.
+- Behaviour preserved: No buy, size, ranking, grading, risk-gate or stop-ratchet logic changed. Stops are cancelled only as part of a confirmed sell; otherwise they are restored. PLTR (flagged 2026-09-28, still held) is outside the 4-day window, so it is not sold automatically. A flag before a four-day weekend expires unsold (fails safe).
+- Known limits: the sync later closes the row, with its exit reason shown as a manual sale. If the sold position was the only holding, the sync does not auto-close it (it refuses when the broker returns zero positions), so the Telegram message asks for a manual sync. The sell happens about 15 minutes after the US open, not exactly at the open as in the test.
+- Tests: `failed-breakout-exit.test.ts` covers market hours including the UK/US clock-change gap, source, staleness, mid-session flags, Friday to Monday, shared tickers, partial quantity, the retry rules, intent logging, failure, CRITICAL escalation and HTML escaping. `trading212.test.ts` covers `sellAtMarket`: confirmed sale, re-protecting remaining shares, restore on rejection, cancel and restore when unconfirmed, and CRITICAL on double failure. Full suite, typecheck and lint at commit; independent review by Claude Sonnet 5.5 (P1s fixed before commit).
+- Author: Copilot CLI agent
+
 ### 2026-10-05 - pending - auto-trade.ts: stale scores cannot grade A; US sessions take US listings only
 
 - File(s): `src/cron/auto-trade.ts` (grading context passes `scoresStale: isScoreStale(scores)`; `isStockForSession` US branch now `isUsPriceListing(ticker)`; two imports). Related non-sacred changes in the same decision set: `src/lib/candidate-grade.ts` (relative-strength threshold 0 → 50 on its 0–100 scale; earnings soon (the scanner's `DEMOTE_WATCH`: confirmed in 3–5 days, or an unconfirmed date within 2 days) and stale scores block A-grade), `src/lib/persist-scan-snapshot.ts` (same freshness flag for persisted grades), `src/lib/score-lookup.ts` (`isScoreStale` treats a missing or invalid timestamp as stale), `src/lib/typesafe-candidate-review.ts` (accepts the new RS wording in B-grade claims).

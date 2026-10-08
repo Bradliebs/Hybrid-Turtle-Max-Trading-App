@@ -872,7 +872,8 @@ async function runNightlyProcess() {
           entryDate: p.entryDate,
           entryTrigger: p.entryTrigger,
           initialRisk: p.initialRisk,
-          currentPrice: currentPrice || p.entryPrice,
+          // No live price → 0, which the detector skips (never flag on the entry price).
+          currentPrice: currentPrice || 0,
           shares: p.shares,
           currency,
           alreadyFlagged: !!p.breakoutFailureDetectedAt,

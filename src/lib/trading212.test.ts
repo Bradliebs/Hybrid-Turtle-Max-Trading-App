@@ -418,8 +418,93 @@ describe('Trading212Client.setStopLoss', () => {
     expect(placeStop).toHaveBeenCalledOnce();
     expect(placeStop).toHaveBeenCalledWith(expect.objectContaining({ quantity: -6, stopPrice: 175 }));
   });
-});
 
+  const held = (quantity: number) => [{ instrument: { ticker: 'AAPL_US_EQ' }, quantity, quantityInPies: 0 }] as never;
+  const fast = { checks: 2, waitMs: 0 };
+
+  it('sellAtMarket cancels the stop, sells, and confirms the holding fell', async () => {
+    const client = new Trading212Client('key', 'secret', 'demo');
+    vi.spyOn(client, 'getPositions').mockResolvedValueOnce(held(10)).mockResolvedValue(held(0));
+    vi.spyOn(client, 'getPendingOrders').mockResolvedValue([makeStop(10, 175, -10)]);
+    const cancel = vi.spyOn(client, 'cancelOrder').mockResolvedValue(undefined);
+    const sell = vi.spyOn(client, 'placeMarketOrder').mockResolvedValue({ ...makeStop(20, 0), type: 'MARKET' });
+    const placeStop = vi.spyOn(client, 'placeStopOrder');
+
+    const result = await client.sellAtMarket('AAPL_US_EQ', 10, fast);
+    expect(cancel).toHaveBeenCalledWith(10);
+    expect(sell).toHaveBeenCalledWith({ quantity: -10, ticker: 'AAPL_US_EQ' });
+    expect(result).toMatchObject({ soldQuantity: 10, remainingQuantity: 0 });
+    expect(placeStop).not.toHaveBeenCalled();
+  });
+
+  it('sellAtMarket re-protects shares it was not asked to sell', async () => {
+    const client = new Trading212Client('key', 'secret', 'demo');
+    vi.spyOn(client, 'getPositions').mockResolvedValueOnce(held(10)).mockResolvedValue(held(4));
+    vi.spyOn(client, 'getPendingOrders').mockResolvedValue([makeStop(10, 175, -10)]);
+    vi.spyOn(client, 'cancelOrder').mockResolvedValue(undefined);
+    vi.spyOn(client, 'placeMarketOrder').mockResolvedValue({ ...makeStop(20, 0), type: 'MARKET' });
+    const placeStop = vi.spyOn(client, 'placeStopOrder').mockResolvedValue(makeStop(21, 175, -4));
+
+    const result = await client.sellAtMarket('AAPL_US_EQ', 6, fast);
+    expect(result).toMatchObject({ soldQuantity: 6, remainingQuantity: 4 });
+    expect(placeStop).toHaveBeenCalledWith({ quantity: -4, stopPrice: 175, ticker: 'AAPL_US_EQ', timeValidity: 'GOOD_TILL_CANCEL' });
+  });
+
+  it('sellAtMarket puts the stop back when the sell is rejected', async () => {
+    const client = new Trading212Client('key', 'secret', 'demo');
+    vi.spyOn(client, 'getPositions').mockResolvedValue(held(10));
+    vi.spyOn(client, 'getPendingOrders').mockResolvedValue([makeStop(10, 175, -10)]);
+    vi.spyOn(client, 'cancelOrder').mockResolvedValue(undefined);
+    vi.spyOn(client, 'placeMarketOrder').mockRejectedValue(new Trading212Error('market closed', 422));
+    const placeStop = vi.spyOn(client, 'placeStopOrder').mockResolvedValue(makeStop(11, 175, -10));
+
+    await expect(client.sellAtMarket('AAPL_US_EQ', 10, fast)).rejects.toThrow('Stop protection was restored');
+    expect(placeStop).toHaveBeenCalledWith({ quantity: -10, stopPrice: 175, ticker: 'AAPL_US_EQ', timeValidity: 'GOOD_TILL_CANCEL' });
+  });
+
+  it('sellAtMarket cancels an unconfirmed order and restores the stop', async () => {
+    const client = new Trading212Client('key', 'secret', 'demo');
+    vi.spyOn(client, 'getPositions').mockResolvedValue(held(10));
+    vi.spyOn(client, 'getPendingOrders').mockResolvedValue([makeStop(10, 175, -10)]);
+    const cancel = vi.spyOn(client, 'cancelOrder').mockResolvedValue(undefined);
+    vi.spyOn(client, 'placeMarketOrder').mockResolvedValue({ ...makeStop(20, 0), type: 'MARKET' });
+    vi.spyOn(client, 'getOrder').mockResolvedValue({ ...makeStop(20, 0), type: 'MARKET' });
+    const placeStop = vi.spyOn(client, 'placeStopOrder').mockResolvedValue(makeStop(11, 175, -10));
+
+    await expect(client.sellAtMarket('AAPL_US_EQ', 10, fast)).rejects.toThrow('not confirmed');
+    expect(cancel).toHaveBeenCalledWith(20);
+    expect(placeStop).toHaveBeenCalledWith(expect.objectContaining({ quantity: -10, stopPrice: 175 }));
+  });
+
+  it('sellAtMarket accepts a fill that positions report late, without a false alarm', async () => {
+    const client = new Trading212Client('key', 'secret', 'demo');
+    vi.spyOn(client, 'getPositions')
+      .mockResolvedValueOnce(held(10)).mockResolvedValueOnce(held(10)).mockResolvedValueOnce(held(10))
+      .mockResolvedValue(held(0));
+    vi.spyOn(client, 'getPendingOrders').mockResolvedValue([makeStop(10, 175, -10)]);
+    const cancel = vi.spyOn(client, 'cancelOrder').mockResolvedValue(undefined);
+    vi.spyOn(client, 'placeMarketOrder').mockResolvedValue({ ...makeStop(20, 0), type: 'MARKET' });
+    vi.spyOn(client, 'getOrder').mockRejectedValue(new Trading212Error('not found', 404));
+    const placeStop = vi.spyOn(client, 'placeStopOrder');
+
+    await expect(client.sellAtMarket('AAPL_US_EQ', 10, fast)).resolves.toMatchObject({ soldQuantity: 10, remainingQuantity: 0 });
+    expect(cancel).toHaveBeenCalledTimes(1); // only the stop, not the filled order
+    expect(placeStop).not.toHaveBeenCalled();
+  });
+
+  it('sellAtMarket raises CRITICAL when the sell and the stop restore both fail', async () => {
+    const client = new Trading212Client('key', 'secret', 'demo');
+    vi.spyOn(client, 'getPositions').mockResolvedValue(held(10));
+    vi.spyOn(client, 'getPendingOrders').mockResolvedValue([makeStop(10, 175, -10)]);
+    vi.spyOn(client, 'cancelOrder').mockResolvedValue(undefined);
+    vi.spyOn(client, 'placeMarketOrder').mockRejectedValue(new Trading212Error('market closed', 422));
+    vi.spyOn(client, 'placeStopOrder').mockRejectedValue(new Trading212Error('restore rejected', 422));
+
+    await expect(client.sellAtMarket('AAPL_US_EQ', 10, fast)).rejects.toThrow('CRITICAL');
+    await expect(client.sellAtMarket('AAPL_US_EQ', 0, fast)).rejects.toThrow('must be positive');
+    await expect(client.sellAtMarket('AAPL_US_EQ', 11, fast)).rejects.toThrow('only 10 held');
+  });
+});
 // ── mapT212Position ──
 
 describe('mapT212Position', () => {

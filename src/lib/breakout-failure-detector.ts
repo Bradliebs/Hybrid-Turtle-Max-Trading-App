@@ -1,9 +1,11 @@
 /**
  * DEPENDENCIES
- * Consumed by: nightly.ts, /api/nightly/route.ts, /api/modules/route.ts
+ * Consumed by: nightly.ts, /api/nightly/route.ts, /api/modules/route.ts; the flag it
+ *              sets is acted on by failed-breakout-exit.ts (auto-trade sells)
  * Consumes: (standalone — no imports)
- * Risk-sensitive: NO — recommendation only, no auto-action
- * Last modified: 2026-03-01
+ * Risk-sensitive: YES (since 2026-10-08) — its flag now triggers an automatic sell
+ *                 of auto-trade positions at the next session
+ * Last modified: 2026-10-08
  * Notes: Detects failed breakouts where price closes back below the entry trigger
  *        within 5 days of entry. This is a fast-exit recommendation to reduce
  *        slow-bleed losses on positions that never followed through.

@@ -59,6 +59,15 @@ Limits:
 
 ## Needs your decision
 
+**Update (same day):** the owner approved H1. It is live from 8 October 2026
+(`src/lib/failed-breakout-exit.ts`, called at the start of each auto-trade
+session; see `docs/SACRED_FILE_CHANGES.md`). Claude Sonnet 5.5 reviewed it
+twice. The first review found three serious gaps: it could sell outside market
+hours, treat "order accepted" as "sold", and sell the whole broker holding. All
+three were fixed before release. The second review said "Safe to ship: YES".
+Turn it off with `FAILED_BREAKOUT_AUTO_EXIT=off`. PLTR (flagged on 28
+September) is outside the 4-day window and stays with its normal stop.
+
 | ID | Decision | Recommendation |
 | --- | --- | --- |
 | H1 | Turn on automatic selling when a breakout fails (within 5 days of entry, a close back below the trigger with under +0.5R profit, sold at the next open) | Yes. It passed on untouched data, and it agrees with the 7 real auto-trade trades (+0.33R each). It changes how live positions are sold (sacred code: auto-exit logic and Telegram reporting), so it needs your go-ahead, tests and a sacred-file log entry |
