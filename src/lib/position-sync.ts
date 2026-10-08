@@ -499,6 +499,21 @@ export async function syncClosedPositions(userId: string = 'default-user', optio
     return result;
   }
 
+  // Scheduled syncs verify holdings too, so record when each account was last read
+  // successfully (system-status and Settings otherwise only see manual syncs).
+  try {
+    const syncedAt = new Date();
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(!investFailed ? { t212LastSync: syncedAt } : {}),
+        ...(!isaFailed ? { t212IsaLastSync: syncedAt } : {}),
+      },
+    });
+  } catch (err) {
+    result.errors.push(`Could not record sync time: ${(err as Error).message}`);
+  }
+
   const untrackedBrokerPositions = findUntrackedBrokerPositions(openPositions, combinedPositions);
   for (const position of untrackedBrokerPositions) {
     const message = `${position.fullTicker} has ${position.shares} share(s) in the ${position.accountType.toUpperCase()} account but no OPEN HybridTurtle position. Reconcile the broker holding and add a protective stop.`;

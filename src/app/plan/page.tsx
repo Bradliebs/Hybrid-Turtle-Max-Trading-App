@@ -17,6 +17,7 @@ import TodayPanel from '@/components/plan/TodayPanel';
 import SessionBriefingCard from '@/components/plan/SessionBriefingCard';
 import { useStore } from '@/store/useStore';
 import { apiRequest } from '@/lib/api-client';
+import { fetchLivePrices as fetchLivePricesBatched } from '@/lib/live-prices-client';
 import { ClipboardList, Calendar, Loader2, ChevronDown, ChevronUp, Shield } from 'lucide-react';
 
 const ADVANCED_VIEW_KEY = 'hybridturtle_advanced_view';
@@ -389,14 +390,7 @@ export default function PlanPage() {
         });
         const tickers = candidateRefs.map((c) => c.yahooTicker || c.ticker);
         if (tickers.length === 0) return;
-        const data = await apiRequest<{
-          prices: Record<string, { price: number; change: number; changePercent: number }>;
-          fetchedAt: string;
-        }>('/api/scan/live-prices', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tickers }),
-        });
+        const data = await fetchLivePricesBatched(tickers);
         if (!data.prices) return;
 
         // Build a map from display ticker → live price
@@ -471,7 +465,7 @@ export default function PlanPage() {
         ) : (
           <>
           {/* ── Session Briefing Card ── */}
-          <SessionBriefingCard />
+          <SessionBriefingCard candidates={candidates.filter(c => !positions.some(p => p.ticker === c.ticker)).map(c => ({ ticker: c.ticker, status: c.status }))} />
 
           {/* ── LAYER 1 + 2: TodayPanel (novice-first, always visible) ── */}
           <TodayPanel

@@ -4,6 +4,7 @@ import { findUntrackedBrokerPositions, shouldFetchOrderHistoryForSync } from './
 
 const mocks = vi.hoisted(() => ({
   findUnique: vi.fn(),
+  userUpdate: vi.fn(async () => ({})),
   positionFindMany: vi.fn(),
   positionUpdate: vi.fn(),
   tradeLogCreate: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     user: {
       findUnique: mocks.findUnique,
+      update: mocks.userUpdate,
     },
     position: {
       findMany: mocks.positionFindMany,
@@ -377,6 +379,31 @@ describe('syncClosedPositions order-history usage', () => {
     expect(result).toMatchObject({ checked: 1, closed: 0, skipped: 0, updated: 1, errors: [] });
     expect(mocks.getOrderHistory).not.toHaveBeenCalled();
     expect(mocks.positionUpdate).not.toHaveBeenCalled();
+  });
+
+  it('records the sync time only for accounts whose holdings were read', async () => {
+    mocks.positionFindMany.mockResolvedValue([makeDbPosition('VOD')]);
+    mocks.getPositions.mockResolvedValue([makePosition('VOD', 72.4)]);
+
+    const { syncClosedPositions } = await import('./position-sync');
+    await syncClosedPositions('default-user', { detectUntrackedSales: false });
+
+    expect(mocks.userUpdate).toHaveBeenCalledTimes(1);
+    expect(mocks.userUpdate).toHaveBeenCalledWith({
+      where: { id: 'default-user' },
+      data: { t212LastSync: new Date(2026, 3, 30, 10, 0, 0) },
+    });
+  });
+
+  it('does not record a sync time when the broker read fails', async () => {
+    mocks.positionFindMany.mockResolvedValue([makeDbPosition('VOD')]);
+    mocks.getPositions.mockRejectedValue(new Error('network down'));
+
+    const { syncClosedPositions } = await import('./position-sync');
+    const result = await syncClosedPositions('default-user', { detectUntrackedSales: false });
+
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(mocks.userUpdate).not.toHaveBeenCalled();
   });
 
   it('alerts when T212 holds a position that has no local OPEN row', async () => {

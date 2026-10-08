@@ -19,6 +19,7 @@ import StatusBadge from '@/components/shared/StatusBadge';
 import RegimeBadge from '@/components/shared/RegimeBadge';
 import { cn, formatPrice } from '@/lib/utils';
 import { apiRequest, ApiClientError, formatApiError } from '@/lib/api-client';
+import { fetchLivePrices as fetchLivePricesBatched } from '@/lib/live-prices-client';
 import { useStore } from '@/store/useStore';
 import { Search, Play, Filter, Check, X, AlertTriangle, BarChart3, GitMerge, RefreshCw, XCircle } from 'lucide-react';
 
@@ -322,14 +323,7 @@ function ScanPageInner() {
     const tickers = actionable.map((c) => c.yahooTicker || c.ticker);
     setIsLoadingLive(true);
     try {
-      const data = await apiRequest<{
-        prices: Record<string, LivePriceData>;
-        fetchedAt: string;
-      }>('/api/scan/live-prices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tickers }),
-      });
+      const data = await fetchLivePricesBatched(tickers);
       // Map back to display ticker (some tickers use yahooTicker like TTE.PA)
       const mapped: Record<string, LivePriceData> = {};
       actionable.forEach((c) => {

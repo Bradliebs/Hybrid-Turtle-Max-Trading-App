@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import {apiRequest, formatApiError } from '@/lib/api-client';
+import { apiRequest, formatApiError } from '@/lib/api-client';
 
 const DEFAULT_USER_ID = 'default-user';
 
@@ -16,22 +16,25 @@ export interface SessionBriefingData {
   availableRiskPct: number;
   usedPositions: number;
   maxPositions: number;
-  readyCandidates: Array<{
-    ticker: string;
-    price: number;
-    entryTrigger: number;
-    sleeve: string;
-  }>;
   openPositionCount: number;
   isHoliday: boolean;
   holidayLabel?: string;
   earlyClose?: string;
 }
 
+export function currentBriefingSession(now: Date = new Date()): SessionBriefingData['session'] {
+  const ukHour = parseInt(
+    new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', hour12: false }).format(now),
+    10
+  );
+  return ukHour < 8 ? 'pre-UK' : ukHour < 14 ? 'UK' : ukHour < 20 ? 'US' : 'post-market';
+}
+
 /**
  * Hook that provides session briefing data for the current trading session.
- * Fetches from /api/modules and /api/system-status to build a consolidated view.
- * Suitable for the Plan page or any component needing pre-session context.
+ * Regime and health come from /api/dashboard/today-directive, the risk budget
+ * from /api/risk (same numbers as the Risk page), and operating mode and equity
+ * from /api/system-status. Candidates are supplied by the caller.
  */
 export function useSessionBriefing(): {
   data: SessionBriefingData | null;
@@ -47,58 +50,27 @@ export function useSessionBriefing(): {
     setLoading(true);
     setError(null);
     try {
-      // Determine current session based on UK hour
-      const now = new Date();
-      const ukHour = parseInt(
-        new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', hour12: false })
-          .format(now),
-        10
-      );
-      const session: SessionBriefingData['session'] =
-        ukHour < 8 ? 'pre-UK' : ukHour < 14 ? 'UK' : ukHour < 20 ? 'US' : 'post-market';
-
-      // Fetch modules data (has regime, positions, candidates, risk budget)
-      const modules = await apiRequest<{
-        regime?: string;
-        healthOverall?: string;
-        openPositions?: Array<{ ticker: string; sleeve: string }>;
-        riskBudget?: { usedRiskPercent: number; maxRiskPercent: number; availableRiskPercent: number; usedPositions: number; maxPositions: number };
-        readyCandidates?: Array<{ ticker: string; currentPrice: number; entryTrigger: number; sleeve: string }>;
-      }>(`/api/modules?userId=${DEFAULT_USER_ID}`);
-
-      // Fetch system status for operating mode and equity
-      const status = await apiRequest<{
-        operatingMode?: string;
-        riskProfile?: string;
-        checks?: Array<{ id: string; value: string }>;
-      }>('/api/system-status');
-
-      const equityCheck = status.checks?.find(c => c.id === 'equity');
-      const equity = equityCheck ? parseFloat(equityCheck.value.replace('£', '').replace(',', '')) : 0;
-
-      const isUKSession = session === 'pre-UK' || session === 'UK';
-      const filteredCandidates = (modules.readyCandidates ?? []).filter(c =>
-        isUKSession ? c.ticker.endsWith('.L') : !c.ticker.endsWith('.L')
-      );
+      const [directive, risk, status] = await Promise.all([
+        apiRequest<{ context?: { regime?: string; healthOverall?: string } }>('/api/dashboard/today-directive'),
+        apiRequest<{
+          equity?: number;
+          budget?: { usedRiskPercent: number; maxRiskPercent: number; availableRiskPercent: number; usedPositions: number; maxPositions: number };
+        }>(`/api/risk?userId=${DEFAULT_USER_ID}`),
+        apiRequest<{ operatingMode?: string }>('/api/system-status'),
+      ]);
 
       setData({
-        session,
-        regime: modules.regime ?? 'UNKNOWN',
-        health: modules.healthOverall ?? 'UNKNOWN',
+        session: currentBriefingSession(),
+        regime: directive.context?.regime ?? 'UNKNOWN',
+        health: directive.context?.healthOverall ?? 'UNKNOWN',
         operatingMode: status.operatingMode ?? 'NORMAL',
-        equity,
-        usedRiskPct: modules.riskBudget?.usedRiskPercent ?? 0,
-        maxRiskPct: modules.riskBudget?.maxRiskPercent ?? 0,
-        availableRiskPct: modules.riskBudget?.availableRiskPercent ?? 0,
-        usedPositions: modules.riskBudget?.usedPositions ?? 0,
-        maxPositions: modules.riskBudget?.maxPositions ?? 0,
-        readyCandidates: filteredCandidates.map(c => ({
-          ticker: c.ticker,
-          price: c.currentPrice,
-          entryTrigger: c.entryTrigger,
-          sleeve: c.sleeve,
-        })),
-        openPositionCount: modules.openPositions?.length ?? 0,
+        equity: risk.equity ?? 0,
+        usedRiskPct: risk.budget?.usedRiskPercent ?? 0,
+        maxRiskPct: risk.budget?.maxRiskPercent ?? 0,
+        availableRiskPct: risk.budget?.availableRiskPercent ?? 0,
+        usedPositions: risk.budget?.usedPositions ?? 0,
+        maxPositions: risk.budget?.maxPositions ?? 0,
+        openPositionCount: risk.budget?.usedPositions ?? 0,
         isHoliday: false, // Would need market-holidays import — keep simple for now
       });
     } catch (err) {

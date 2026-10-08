@@ -115,8 +115,8 @@ git history.
 Not changed: the scan engine, scores, risk gates, sizing, stops, sync, Jev,
 the module system, the VPIN and sentiment panels, and the six modules that were
 already unused before this work (`SystemHeatWidget`, `AddPositionModal`,
-`GateBlockerBreakdown`, `GradeBadge`, `useHealthCheck`, `usePositions`). These
-are follow-ups.
+`GateBlockerBreakdown`, `GradeBadge`, `useHealthCheck`, `usePositions`).
+Those six were removed later the same evening.
 
 ## Reproduce
 

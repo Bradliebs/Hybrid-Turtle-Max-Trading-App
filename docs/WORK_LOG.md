@@ -1476,3 +1476,25 @@ recommendation" (S1–S4 in
   - the Plan page's live-price request returns 400 (likely more than 50 tickers);
   - system-status reports "T212 Sync 385h ago";
   - every stored Scan has regime BULLISH.
+
+### Follow-up fixes (same evening)
+- **T212 Sync warning (385h):** a false alarm. The scheduled syncs read
+  holdings successfully, but only the manual sync button recorded the time.
+  `syncClosedPositions` now records it for each account read successfully.
+- **Plan page live prices:** the page sent 61 tickers to a 50-ticker endpoint
+  and got a 400. New `src/lib/live-prices-client.ts` sends batches of 50, one
+  after another; used by the Plan and Scan pages.
+- **Plan briefing card:** it read fields `/api/modules` doesn't return, so it
+  always showed "Regime UNKNOWN", "0/0", "buying blocked" and "Risk budget
+  full". It now uses today-directive (regime and health) and `/api/risk`
+  (budget). Held tickers are left out of its READY chips.
+- **Plan "You have a trade today":** it could suggest a stock already held
+  (PLTR). TodayPanel now leaves held tickers out.
+- **Every scan BULLISH:** checked, not a bug. Recomputed from Yahoo SPY and
+  VWRL.L, all 111 trading days since May were BULLISH (SPY never closer than
+  4.3% above its 200-day average).
+- Removed the six components and hooks that were already unused.
+- Not changed:
+  - `/api/scan` returns 404 when the cache is stale (by design);
+  - the midday sync reports "PRTS: closure accounting pending -
+    MULTIPLE_SELL_ORDERS" on each run.

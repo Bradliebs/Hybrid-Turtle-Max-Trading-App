@@ -703,13 +703,16 @@ function OpenPositions({ positions }: { positions: TodayPosition[] }) {
 // ══════════════════════════════════════════════════════════════
 
 export default function TodayPanel(props: TodayPanelProps) {
-  const state = determinePanelState(props);
-  const bestCandidate = selectBestCandidate(props.candidates);
-  const closest = findClosestCandidate(props.candidates);
+  // Never suggest buying a stock that is already held.
+  const heldTickers = new Set(props.positions.map((p) => p.ticker));
+  const candidates = props.candidates.filter((c) => !heldTickers.has(c.ticker));
+  const state = determinePanelState({ ...props, candidates });
+  const bestCandidate = selectBestCandidate(candidates);
+  const closest = findClosestCandidate(candidates);
   const advancedView = props.advancedView ?? false;
 
   // Compute signals for the summary strip (advanced view only)
-  const representativeCandidate = bestCandidate || selectTopCandidate(props.candidates);
+  const representativeCandidate = bestCandidate || selectTopCandidate(candidates);
   const adxSignal = adxToLabel(representativeCandidate?.scanAdx);
   const hurstSignal = hurstToLabel(representativeCandidate?.hurstExponent);
   const regimeSignal = regimeToLabel(props.marketRegime);
