@@ -47,8 +47,18 @@ stand-alone check, not one of the seven. It covers every A-grade candidate, not
 only the ones auto-trade would have bought. A variant (e.g. FAILX) is not a
 resume signal on its own; it must first pass its E1 gate and be adopted.
 
+Amendment 2026-10-08, evening (still before any prospective outcome existed):
+S4 added for the owner's simplification decision, Bonferroni widened from seven
+to eight comparisons. S4 asks whether a much simpler buy rule does at least as
+well as the current A-grade selection. CORE population: every scanned stock
+(any grade), first scan of each UTC date, where the scan regime is BULLISH,
+price > MA200, ADX > 20, and price is at or above the entry trigger by no more
+than 0.8 x ATR (ATR from the scan's atrPercent). Both groups use the common trade
+model with FAILX exits (live since 2026-10-08) and count each ticker at most once
+per 56 calendar days.
+
 Tests and evidence gates. Intervals resample whole signal dates and are
-Bonferroni-corrected for the seven comparisons (99.29% two-sided, i.e. 0.05 / 7):
+Bonferroni-corrected for the eight comparisons (99.375% two-sided, i.e. 0.05 / 8):
   E1 exits: variant R minus LIVE R per candidate, over every completed candidate.
      (Variants can differ even on trades that never rise: the live trail uses the
      current ATR, so a falling ATR tightens it with no price gain.) Gate: at least
@@ -65,6 +75,11 @@ Bonferroni-corrected for the seven comparisons (99.29% two-sided, i.e. 0.05 / 7)
      exits; unfilled pullbacks score 0R. A candidate counts only once the latest
      possible pullback window (fill on session 5 plus 40 sessions) is complete.
      Gate: 30 candidates on 15 dates.
+  S4 simple CORE rule: mean CORE R minus mean A-grade R (FAILX exits, each ticker
+     once per 56 days), resampling dates from both groups together. Gate: 30
+     candidates on 15 dates in each group. CORE NOT WORSE (interval low end above
+     -0.10R) supports replacing the scoring stack with the simple rule; WORSE
+     (high end below zero) supports keeping it; otherwise INCONCLUSIVE.
 
 Expected pace: about 15 A-grade signals a month, so most gates need 6-12 months
 and many results will read INCONCLUSIVE. That is the honest outcome, not a
@@ -91,7 +106,7 @@ FREEZE = dt.date(2026, 10, 6)
 HORIZON = 40
 MIN_N, MIN_DATES = 30, 15
 BOOTSTRAPS = 4000
-TAIL = 100 * 0.05 / 7 / 2  # Bonferroni: seven comparisons, two-sided
+TAIL = 100 * 0.05 / 8 / 2  # Bonferroni: eight comparisons, two-sided
 
 args = [a for a in sys.argv[1:] if not a.startswith('--')]
 DB = args[0] if args else 'prisma/dev.db'
@@ -111,6 +126,21 @@ rows['time'] = pd.to_datetime(pd.to_numeric(rows.runDate, errors='coerce'), unit
 rows['date'] = rows.time.dt.date
 rows = rows[(rows.date >= start) & ((rows.date <= end) if end else True)]
 rows = rows.sort_values('time').drop_duplicates(['ticker', 'date'], keep='first').reset_index(drop=True)
+
+# S4 CORE population (amendment 2026-10-08, evening).
+core = pd.read_sql("""
+  select st.ticker, st.yahooTicker, sc.runDate, sr.entryTrigger
+  from ScanResult sr join Scan sc on sc.id = sr.scanId join Stock st on st.id = sr.stockId
+  where sc.regime = 'BULLISH' and sr.price > sr.ma200 and sr.adx > 20
+    and sr.entryTrigger > 0 and sr.atrPercent > 0 and sr.price >= sr.entryTrigger
+    and sr.price - sr.entryTrigger <= 0.8 * sr.atrPercent / 100 * sr.price""", con)
+core['symbol'] = [to_yahoo(t, o) for t, o in zip(core.ticker, core.yahooTicker)]
+core['time'] = pd.to_datetime(pd.to_numeric(core.runDate, errors='coerce'), unit='ms', utc=True)
+core['date'] = core.time.dt.date
+core = core[(core.date >= start) & ((core.date <= end) if end else True)]
+core = core.sort_values('time').drop_duplicates(['ticker', 'date'], keep='first').reset_index(drop=True)
+# Fetch each symbol once, from the earliest date either population needs.
+first_needed = pd.concat([rows[['symbol', 'date']], core[['symbol', 'date']]]).groupby('symbol').date.min().to_dict()
 
 
 
@@ -134,31 +164,51 @@ def verdict(frame, column, n_needed, dates_needed):
     return text + (' -> BETTER' if low > 0 else ' -> WORSE' if high < 0 else ' -> INCONCLUSIVE')
 
 
-label = 'SMOKE RUN (past window; not evidence)' if SMOKE else f'Prospective (signals from {FREEZE})'
-print(f'{label}: {len(rows)} A-grade candidates on {rows.date.nunique()} dates')
-results, excluded, cache = [], [], {}
-for row in rows.itertuples():
+cache = {}
+
+
+def prepare(row):
+    """(bars, entry_index, entry, risk) for one candidate, or the reason it is excluded."""
     try:
         if row.symbol not in cache:
-            cache[row.symbol] = fetch(row.symbol, row.date)
+            cache[row.symbol] = fetch(row.symbol, first_needed[row.symbol])
             time.sleep(0.4)
         bars = cache[row.symbol]
     except Exception as error:  # network or symbol failure: list it, never guess
-        excluded.append((row.ticker, str(row.date), f'fetch failed: {type(error).__name__}'))
-        continue
+        return f'fetch failed: {type(error).__name__}'
     dates = list(bars.index)
     signal_index = max((i for i, d in enumerate(dates) if d <= row.date), default=None)
     if signal_index is None or signal_index < 22 or signal_index + 1 >= len(bars):
-        excluded.append((row.ticker, str(row.date), 'not enough bars yet'))
-        continue
+        return 'not enough bars yet'
     window = bars.iloc[signal_index - 22:min(len(bars), signal_index + 1 + HORIZON + 5)]
     factor = window.adj / window.close
     if (factor / factor.iloc[0] - 1).abs().max() > 0.02:
-        excluded.append((row.ticker, str(row.date), 'adjustment factor changed (corporate action)'))
-        continue
-    risk = 1.5 * atr(bars, signal_index, 14)
+        return 'adjustment factor changed (corporate action)'
     entry_index = signal_index + 1
-    entry = bars.open.iloc[entry_index]
+    return bars, entry_index, bars.open.iloc[entry_index], 1.5 * atr(bars, signal_index, 14)
+
+
+def independent_of(frame):
+    """Each ticker at most once per 56 calendar days (overlapping repeats are near-duplicates)."""
+    kept, last_seen = [], {}
+    for row in (frame.sort_values('date').itertuples() if len(frame) else []):
+        previous = last_seen.get(row.ticker)
+        if previous is None or (row.date - previous).days > 56:
+            kept.append(row.Index)
+            last_seen[row.ticker] = row.date
+    return frame.loc[kept] if kept else frame.iloc[0:0]
+
+
+label = 'SMOKE RUN (past window; not evidence)' if SMOKE else f'Prospective (signals from {FREEZE})'
+print(f'{label}: {len(rows)} A-grade candidates on {rows.date.nunique()} dates; '
+      f'{len(core)} CORE candidates on {core.date.nunique()} dates')
+results, excluded = [], []
+for row in rows.itertuples():
+    prepared = prepare(row)
+    if isinstance(prepared, str):
+        excluded.append((row.ticker, str(row.date), prepared))
+        continue
+    bars, entry_index, entry, risk = prepared
     record = {'ticker': row.ticker, 'date': row.date, 'status': row.status, 'rankScore': row.rankScore, 'ncs': row.ncs}
     for variant in ('LIVE', 'W20', 'LATE', 'CHAND', 'FAILX'):
         record[variant] = simulate(bars, entry_index, entry, risk, variant, row.entryTrigger)
@@ -185,15 +235,7 @@ if len(done):
         print(f'  {variant:<8} mean {values.mean():+.2f}R  win {100 * (values > 0).mean():.0f}%  n={len(values)}')
 
 print('\nRestart check (not part of the corrected family): current rules (LIVE) on their own')
-# Overlapping repeats of one stock (A-grade on consecutive days, 40-session trades)
-# are near-duplicates, so count each ticker at most once per 56 calendar days.
-kept, last_seen = [], {}
-for row in (done.sort_values('date').itertuples() if len(done) else []):
-    previous = last_seen.get(row.ticker)
-    if previous is None or (row.date - previous).days > 56:
-        kept.append(row.Index)
-        last_seen[row.ticker] = row.date
-independent = done.loc[kept] if kept else done.iloc[0:0]
+independent = independent_of(done)
 if len(independent):
     low, high = date_bootstrap(independent, 'LIVE', tail=2.5)
     enough = (len(independent) >= MIN_N and independent.date.nunique() >= MIN_DATES
@@ -252,6 +294,45 @@ print('\nS3 entry style (pullback minus breakout, per candidate):')
 paired = done.dropna(subset=['PULLBACK']) if len(done) else done
 print('  ' + (verdict(paired.assign(diff=paired.PULLBACK - paired.LIVE), 'diff', MIN_N, MIN_DATES)
               if len(paired) else 'INSUFFICIENT EVIDENCE'))
+
+print('\nS4 simple CORE rule (CORE minus A-grade, FAILX exits, each ticker once per 56 days):')
+core_results = []
+for row in core.itertuples():
+    prepared = prepare(row)
+    if isinstance(prepared, str):
+        if prepared != 'not enough bars yet':
+            excluded.append((row.ticker, str(row.date), 'CORE: ' + prepared))
+        continue
+    bars, entry_index, entry, risk = prepared
+    core_results.append({'ticker': row.ticker, 'date': row.date,
+                         'FAILX': simulate(bars, entry_index, entry, risk, 'FAILX', row.entryTrigger)})
+core_df = pd.DataFrame(core_results)
+core_done = independent_of(core_df.dropna(subset=['FAILX']).reset_index(drop=True)) if len(core_df) else core_df
+grade_done = independent_of(done.dropna(subset=['FAILX'])) if len(done) else done
+if len(core_done) and len(grade_done):
+    gap = core_done.FAILX.mean() - grade_done.FAILX.mean()
+    text = (f'  CORE n={len(core_done)} {core_done.FAILX.mean():+.2f}R, A-grade n={len(grade_done)} '
+            f'{grade_done.FAILX.mean():+.2f}R, gap {gap:+.2f}R')
+    if (len(core_done) >= MIN_N and len(grade_done) >= MIN_N
+            and core_done.date.nunique() >= MIN_DATES and grade_done.date.nunique() >= MIN_DATES):
+        both = pd.concat([core_done.assign(group='CORE'), grade_done[['ticker', 'date', 'FAILX']].assign(group='A')])
+        days = both.date.unique()
+        groups = {day: part for day, part in both.groupby('date')}
+        rng = np.random.default_rng(20261005)
+        gaps = []
+        for _ in range(BOOTSTRAPS):
+            sample = pd.concat([groups[d] for d in rng.choice(days, len(days))])
+            c, a = sample[sample.group == 'CORE'].FAILX, sample[sample.group == 'A'].FAILX
+            if len(c) and len(a):
+                gaps.append(c.mean() - a.mean())
+        low, high = np.percentile(gaps, [TAIL, 100 - TAIL])
+        text += f', corrected interval [{low:+.2f}, {high:+.2f}] -> ' + (
+            'CORE NOT WORSE' if low > -0.10 else 'CORE WORSE' if high < 0 else 'INCONCLUSIVE')
+    else:
+        text += ' -> INSUFFICIENT EVIDENCE'
+    print(text)
+else:
+    print('  INSUFFICIENT EVIDENCE')
 
 if excluded:
     print('\nExcluded (ticker, signal date, reason):')
