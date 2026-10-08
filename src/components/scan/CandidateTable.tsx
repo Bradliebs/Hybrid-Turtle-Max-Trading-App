@@ -6,7 +6,6 @@ import StatusBadge from '@/components/shared/StatusBadge';
 import EntryQualityBadge from './EntryQualityBadge';
 import type { EntryQuality } from '@/types';
 import WhyCardPopover, { WhyCardProvider, type WhyCardData, type WhyCardSection } from '@/components/shared/WhyCardPopover';
-import CandidateExplainButton from '@/components/candidates/CandidateExplainButton';
 import {
   SCAN_STATUS_EXPLANATIONS,
   FILTER_EXPLANATIONS,
@@ -250,7 +249,6 @@ export default function CandidateTable({ candidates, showSizing = false }: Candi
                     {!isTriggered && c.status !== 'READY' && (
                       <WhyCardPopover data={buildCandidateWhyData(c)} />
                     )}
-                    <CandidateExplainButton ticker={c.ticker} />
                   </div>
                 </td>
                 {showSizing && (

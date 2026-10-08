@@ -2,8 +2,8 @@
  * Targeted test suite for the research-driven architecture.
  *
  * Tests the core research loop:
- *   candidate outcome persistence → forward enrichment → filter scorecard →
- *   score validation → allocation scoring → execution audit → CORE_LITE mode
+ *   candidate outcome persistence → forward enrichment → score buckets →
+ *   allocation scoring → CORE_LITE mode
  *
  * All tests use deterministic fixtures. No DB or API calls.
  */
@@ -17,26 +17,6 @@ import {
 } from './candidate-outcome';
 
 import { computeForwardMetrics } from './candidate-outcome-enrichment';
-
-import {
-  mean as fsMean,
-  rate,
-  computeBucketStats,
-  splitAndScore,
-  computeScoreBands,
-  NCS_BANDS,
-  FWS_BANDS,
-  type OutcomeRow as FSOutcomeRow,
-} from './filter-scorecard';
-
-import {
-  computeStats,
-  bucketRows,
-  testMonotonicity,
-  NCS_BANDS as SV_NCS_BANDS,
-  FWS_BANDS as SV_FWS_BANDS,
-  type OutcomeRow as SVOutcomeRow,
-} from './score-validation';
 
 import { classifyDualScoreAction } from './score-backfill';
 
@@ -53,14 +33,6 @@ import {
   type AllocationCandidate,
   type PortfolioContext,
 } from './allocation-score';
-
-import {
-  calcSlippagePct,
-  calcSlippageR,
-  wouldViolateAntiChase,
-  riskRulesMetPostFill,
-  MATERIAL_THRESHOLDS,
-} from './execution-audit';
 
 import {
   runTechnicalFilters,
@@ -126,51 +98,6 @@ function makeScanCandidate(overrides?: Partial<ScanCandidate>): ScanCandidate {
       hurstExponent: 0.65,
       hurstWarn: false,
     },
-    ...overrides,
-  };
-}
-
-function makeFSRow(overrides?: Partial<FSOutcomeRow>): FSOutcomeRow {
-  return {
-    passedTechFilter: true,
-    passedRiskGates: true,
-    passedAntiChase: true,
-    blockedByRegime: false,
-    regime: 'BULLISH',
-    status: 'READY',
-    sleeve: 'CORE',
-    ncs: 72,
-    fws: 15,
-    bqs: 80,
-    fwdReturn5d: 1.5,
-    fwdReturn10d: 3.0,
-    fwdReturn20d: 5.0,
-    mfeR: 2.1,
-    maeR: -0.5,
-    reached1R: true,
-    reached2R: true,
-    stopHit: false,
-    enrichedAt: new Date(),
-    ...overrides,
-  };
-}
-
-function makeSVRow(overrides?: Partial<SVOutcomeRow>): SVOutcomeRow {
-  return {
-    bqs: 75,
-    fws: 20,
-    ncs: 72,
-    dualScoreAction: 'Auto-Yes',
-    tradePlaced: false,
-    fwdReturn5d: 1.5,
-    fwdReturn10d: 3.0,
-    fwdReturn20d: 5.0,
-    mfeR: 2.1,
-    maeR: -0.5,
-    reached1R: true,
-    reached2R: true,
-    stopHit: false,
-    enrichedAt: new Date(),
     ...overrides,
   };
 }
@@ -343,73 +270,7 @@ describe('research-loop: forward outcome enrichment', () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════
-// 3. FILTER SCORECARD AGGREGATION
-// ═════════════════════════════════════════════════════════════════════
-
-describe('research-loop: filter scorecard aggregation', () => {
-  it('splitAndScore correctly partitions and scores both sides', () => {
-    const rows = [
-      makeFSRow({ passedTechFilter: true, fwdReturn20d: 8.0, reached1R: true, stopHit: false }),
-      makeFSRow({ passedTechFilter: true, fwdReturn20d: 4.0, reached1R: true, stopHit: false }),
-      makeFSRow({ passedTechFilter: false, fwdReturn20d: -3.0, reached1R: false, stopHit: true }),
-    ];
-    const result = splitAndScore(rows, 'Tech Filter', 'Test', (r) => r.passedTechFilter);
-
-    expect(result.passedCount).toBe(2);
-    expect(result.blockedCount).toBe(1);
-    expect(result.passRate).toBe(66.7);
-    expect(result.passed.avgFwd20d).toBe(6);    // mean(8, 4)
-    expect(result.blocked.avgFwd20d).toBe(-3);
-    expect(result.passed.hit1RRate).toBe(100);   // 2/2
-    expect(result.blocked.stopHitRate).toBe(100); // 1/1
-  });
-
-  it('computeScoreBands produces monotonic output when data is monotonic', () => {
-    const rows = [
-      makeFSRow({ ncs: 45, fwdReturn20d: -2.0 }),
-      makeFSRow({ ncs: 55, fwdReturn20d: 1.0 }),
-      makeFSRow({ ncs: 65, fwdReturn20d: 3.0 }),
-      makeFSRow({ ncs: 75, fwdReturn20d: 6.0 }),
-      makeFSRow({ ncs: 85, fwdReturn20d: 10.0 }),
-    ];
-    const bands = computeScoreBands(rows, 'NCS', NCS_BANDS, (r) => r.ncs);
-    const returns = bands.map((b) => b.avgFwd20d).filter((v): v is number => v != null);
-    // Returns should increase: -2, 1, 3, 6, 10
-    for (let i = 1; i < returns.length; i++) {
-      expect(returns[i]).toBeGreaterThan(returns[i - 1]);
-    }
-  });
-
-  it('FWS bands produce inverse monotonic output when FWS predicts weakness', () => {
-    const rows = [
-      makeFSRow({ fws: 5, fwdReturn20d: 8.0 }),   // low weakness → good
-      makeFSRow({ fws: 25, fwdReturn20d: 4.0 }),
-      makeFSRow({ fws: 40, fwdReturn20d: 1.0 }),
-      makeFSRow({ fws: 55, fwdReturn20d: -2.0 }),
-      makeFSRow({ fws: 70, fwdReturn20d: -5.0 }),  // high weakness → bad
-    ];
-    const bands = computeScoreBands(rows, 'FWS', FWS_BANDS, (r) => r.fws);
-    const returns = bands.map((b) => b.avgFwd20d).filter((v): v is number => v != null);
-    // Returns should decrease: 8, 4, 1, -2, -5
-    for (let i = 1; i < returns.length; i++) {
-      expect(returns[i]).toBeLessThan(returns[i - 1]);
-    }
-  });
-
-  it('unenriched rows excluded from outcome metrics but counted', () => {
-    const rows = [
-      makeFSRow({ enrichedAt: null, fwdReturn5d: null, reached1R: null }),
-      makeFSRow({ enrichedAt: new Date(), fwdReturn5d: 2.0, reached1R: true }),
-    ];
-    const stats = computeBucketStats(rows);
-    expect(stats.count).toBe(2);
-    expect(stats.withOutcomes).toBe(1);
-    expect(stats.avgFwd5d).toBe(2.0); // only enriched row
-  });
-});
-
-// ═════════════════════════════════════════════════════════════════════
-// 4. SCORE BUCKET ASSIGNMENT & VALIDATION
+// 3. SCORE BUCKET ASSIGNMENT
 // ═════════════════════════════════════════════════════════════════════
 
 describe('research-loop: score bucket assignment', () => {
@@ -441,47 +302,10 @@ describe('research-loop: score bucket assignment', () => {
     // The threshold is >65, not >=65
   });
 
-  it('NCS buckets cover the full range without gaps', () => {
-    const testValues = [0, 10, 30, 49, 50, 55, 59, 60, 65, 69, 70, 75, 79, 80, 85, 90, 100];
-    for (const v of testValues) {
-      const matched = SV_NCS_BANDS.filter((b) => v >= b.low && v < b.high);
-      expect(matched).toHaveLength(1);
-    }
-  });
-
-  it('FWS buckets cover the full FWS range without gaps', () => {
-    const testValues = [0, 5, 10, 15, 20, 25, 30, 40, 50, 55, 60, 65, 70, 80, 95];
-    for (const v of testValues) {
-      const matched = SV_FWS_BANDS.filter((b) => v >= b.low && v < b.high);
-      expect(matched).toHaveLength(1);
-    }
-  });
-
-  it('testMonotonicity detects perfect ascending', () => {
-    const bands = [
-      { score: 'NCS', band: 'low', bandLow: 0, bandHigh: 50, stats: { ...computeStats([]), avgFwd20d: 1.0 } as ReturnType<typeof computeStats> },
-      { score: 'NCS', band: 'mid', bandLow: 50, bandHigh: 70, stats: { ...computeStats([]), avgFwd20d: 3.0 } as ReturnType<typeof computeStats> },
-      { score: 'NCS', band: 'high', bandLow: 70, bandHigh: 100, stats: { ...computeStats([]), avgFwd20d: 7.0 } as ReturnType<typeof computeStats> },
-    ];
-    const result = testMonotonicity(bands, 'Fwd 20d', (s) => s.avgFwd20d, 'ascending');
-    expect(result.isMonotonic).toBe(true);
-    expect(result.violations).toBe(0);
-  });
-
-  it('testMonotonicity detects violations', () => {
-    const bands = [
-      { score: 'NCS', band: 'low', bandLow: 0, bandHigh: 50, stats: { ...computeStats([]), avgFwd20d: 5.0 } as ReturnType<typeof computeStats> },
-      { score: 'NCS', band: 'mid', bandLow: 50, bandHigh: 70, stats: { ...computeStats([]), avgFwd20d: 2.0 } as ReturnType<typeof computeStats> },
-      { score: 'NCS', band: 'high', bandLow: 70, bandHigh: 100, stats: { ...computeStats([]), avgFwd20d: 8.0 } as ReturnType<typeof computeStats> },
-    ];
-    const result = testMonotonicity(bands, 'Fwd 20d', (s) => s.avgFwd20d, 'ascending');
-    expect(result.isMonotonic).toBe(false);
-    expect(result.violations).toBe(1);
-  });
 });
 
 // ═════════════════════════════════════════════════════════════════════
-// 5. ALLOCATION SCORE CALCULATION
+// 4. ALLOCATION SCORE CALCULATION
 // ═════════════════════════════════════════════════════════════════════
 
 describe('research-loop: allocation score calculation', () => {
@@ -583,49 +407,7 @@ describe('research-loop: allocation score calculation', () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════
-// 6. EXECUTION DRAG / SLIPPAGE CALCULATION
-// ═════════════════════════════════════════════════════════════════════
-
-describe('research-loop: execution drag calculation', () => {
-  it('slippage % is positive when fill exceeds plan (bad)', () => {
-    expect(calcSlippagePct(100, 100.5)).toBeCloseTo(0.5, 2);
-  });
-
-  it('slippage % is negative when fill is better than plan (good)', () => {
-    expect(calcSlippagePct(100, 99.5)).toBeCloseTo(-0.5, 2);
-  });
-
-  it('slippage R converts entry gap to risk-relative terms', () => {
-    // Plan 100, fill 101, risk = 5 → slippage = 0.2R
-    expect(calcSlippageR(100, 101, 5)).toBeCloseTo(0.2, 2);
-    // Better fill: plan 100, fill 99, risk = 5 → -0.2R
-    expect(calcSlippageR(100, 99, 5)).toBeCloseTo(-0.2, 2);
-  });
-
-  it('anti-chase violation uses 0.8 ATR threshold from entry trigger', () => {
-    // Trigger = 100, ATR = 5: 0.8 × 5 = 4, so fill > 104 violates
-    expect(wouldViolateAntiChase(104.1, 100, 5)).toBe(true);
-    expect(wouldViolateAntiChase(103.9, 100, 5)).toBe(false);
-    expect(wouldViolateAntiChase(100, 100, 5)).toBe(false); // at trigger = OK
-  });
-
-  it('risk rules allow 25% tolerance above profile limit', () => {
-    // SMALL_ACCOUNT: 2.0% max risk. 25% tolerance = 2.5%
-    expect(riskRulesMetPostFill(20, 1000, 2.0)).toBe(true);  // 2.0% = within limit
-    expect(riskRulesMetPostFill(24, 1000, 2.0)).toBe(true);  // 2.4% = within tolerance
-    expect(riskRulesMetPostFill(26, 1000, 2.0)).toBe(false); // 2.6% = exceeds tolerance
-  });
-
-  it('material slippage flag uses MATERIAL_THRESHOLDS.slippagePct', () => {
-    // > 0.5% is material
-    const threshold = MATERIAL_THRESHOLDS.slippagePct;
-    expect(Math.abs(calcSlippagePct(100, 100.4)) < threshold).toBe(true);  // 0.4% < 0.5%
-    expect(Math.abs(calcSlippagePct(100, 100.6)) > threshold).toBe(true);  // 0.6% > 0.5%
-  });
-});
-
-// ═════════════════════════════════════════════════════════════════════
-// 7. FULL vs CORE_LITE MODE
+// 5. FULL vs CORE_LITE MODE
 // ═════════════════════════════════════════════════════════════════════
 
 describe('research-loop: FULL vs CORE_LITE mode', () => {

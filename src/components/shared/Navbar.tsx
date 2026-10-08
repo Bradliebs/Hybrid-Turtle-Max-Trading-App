@@ -3,7 +3,7 @@
 /**
  * DEPENDENCIES
  * Consumed by: app pages across the web UI
- * Consumes: src/types/index.ts, src/store/useStore.ts, src/components/DangerLevelIndicator.tsx, src/components/TDARegimeBadge.tsx, src/lib/utils.ts
+ * Consumes: src/types/index.ts, src/store/useStore.ts, src/lib/utils.ts
  * Risk-sensitive: NO
  * Last modified: 2026-03-08
  * Notes: Main app navigation, updated with Phase 9 review pages.
@@ -15,8 +15,6 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { MAIN_NAV_ITEMS, RISK_PROFILES, isNavGroup, type NavEntry, type NavGroup, type NavItem } from '@/types';
 import { useStore } from '@/store/useStore';
-import DangerLevelIndicator, { useDangerLevel } from '@/components/DangerLevelIndicator';
-import TDARegimeBadge, { type TDAState } from '@/components/TDARegimeBadge';
 import {
   LayoutDashboard,
   Briefcase,
@@ -219,12 +217,6 @@ export default function Navbar() {
 
           {/* Right Section */}
           <div className="flex items-center gap-3">
-            {/* Market Danger Indicator (persistent) */}
-            <NavDangerBadge />
-
-            {/* TDA Regime Badge (persistent) */}
-            <NavTDABadge />
-
             {/* Notification Bell */}
             <Link
               href="/notifications"
@@ -288,57 +280,5 @@ export default function Navbar() {
         </div>
       </div>
     </nav>
-  );
-}
-
-// ── Persistent Danger Badge (separate component to avoid hook rules) ──
-
-function NavDangerBadge() {
-  const dangerData = useDangerLevel();
-
-  if (!dangerData.hasData || dangerData.dangerScore < 30) return null;
-
-  return (
-    <DangerLevelIndicator
-      dangerScore={dangerData.dangerScore}
-      immuneAlert={dangerData.immuneAlert}
-      riskTighteningPercent={dangerData.riskTighteningPercent}
-      topMatches={dangerData.topMatches}
-      varianceRiskPremium={dangerData.varianceRiskPremium}
-      compact
-    />
-  );
-}
-
-// ── Persistent TDA Regime Badge ──
-
-function NavTDABadge() {
-  const [tdaState, setTdaState] = useState<{ state: TDAState; transitionWarning: boolean } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const fetchTDA = async () => {
-      try {
-        const res = await fetch('/api/prediction/tda-regime');
-        if (!res.ok) return;
-        const json = await res.json();
-        if (cancelled) return;
-        if (json.ok && json.data) {
-          setTdaState({ state: json.data.state, transitionWarning: json.data.transitionWarning });
-        }
-      } catch { /* silent */ }
-    };
-    fetchTDA();
-    return () => { cancelled = true; };
-  }, []);
-
-  if (!tdaState) return null;
-
-  return (
-    <TDARegimeBadge
-      state={tdaState.state}
-      transitionWarning={tdaState.transitionWarning}
-      compact
-    />
   );
 }

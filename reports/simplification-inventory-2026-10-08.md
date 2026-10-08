@@ -33,7 +33,7 @@ depends on it.
 
 | Area | Size | Reached by trading? | Recommendation |
 | --- | ---: | --- | --- |
-| Prediction and ML engine (`src/lib/prediction`, `src/app/api/prediction`, Prediction page, Danger and TDA badges) | 40 files, about 5,850 lines | No | Remove: advisory only, never validated, and its badges add noise to every page |
+| Prediction and ML engine (`src/lib/prediction`, `src/app/api/prediction`, Prediction page, Danger and TDA badges) | 40 files, about 5,850 lines | Nightly only (correction: nightly Steps 7b–7f retrained it; auto-trade never imported it) | Remove: advisory only, never validated, and its badges add noise to every page |
 | AI analyst (`src/lib/analyst`, `src/app/api/analyst`) | 18 files, about 2,870 lines | No | Remove, or keep only if you use the explanations |
 | Research and audit pages: Causal Audit, Signal Audit, Score Lab, Filter Scorecard, Breakout Evidence, Evidence, Execution Quality, Exec Audit, Trade Pulse, Watchlist News, Signals/Backtest | 11 pages (about 5,500 lines) plus their API routes and components | No | Remove or merge into one "Research" page; the scripts in `scripts/research` now do this work reproducibly |
 | Module system (`src/lib/modules`, `/api/modules`) | 11 files, about 1,570 lines | No | Check, then remove |
@@ -73,13 +73,50 @@ Until then, the current rules stay, and pausing new buys is still recommended.
 
 ## Needs your decision
 
-| ID | Decision | Recommendation |
-| --- | --- | --- |
-| S1 | Remove the prediction/ML engine and its badges | Yes |
-| S2 | Remove the AI analyst | Yes, unless you use it |
-| S3 | Remove or merge the 11 research and audit pages | Merge into one page, or remove |
-| S4 | Paper-test the simple core strategy | Yes; it runs alongside, with no live change |
-| S5 | Jev | Decide after its scorecard in late October |
+| ID | Decision | Recommendation | Status (2026-10-08 evening) |
+| --- | --- | --- | --- |
+| S1 | Remove the prediction/ML engine and its badges | Yes | Done |
+| S2 | Remove the AI analyst | Yes, unless you use it | Done |
+| S3 | Remove or merge the 11 research and audit pages | Merge into one page, or remove | Done (removed) |
+| S4 | Paper-test the simple core strategy | Yes; it runs alongside, with no live change | Done (forward test S4) |
+| S5 | Jev | Decide after its scorecard in late October | Open |
+
+## What was done (2026-10-08 evening, owner approved "go with your recommendation")
+
+S1–S3 removed 139 files, about 28,900 lines in total (staged diff: 292
+insertions, 28,884 deletions, including docs). Everything is recoverable from
+git history.
+
+- **Prediction engine:** `src/lib/prediction/**`, `/api/prediction/*`,
+  `/prediction-status`, the readiness tile, the Danger and TDA navbar badges,
+  the Plan-page prediction panels (intervals, failure modes, signal weights,
+  stress test, lead-lag, GNN, beliefs), Kelly sizing in the manual Buy dialog,
+  the RL advisor badge on positions, nightly Steps 7b–7f, and the readiness
+  field in `/api/system-status`.
+- **AI analyst:** `src/lib/analyst/**`, `/api/analyst/*`, the dashboard card,
+  the candidate "Explain" buttons, and the Telegram commands `/analyst`, `/ask`,
+  `/news`, `/scorecard`, `/explain`, `/watchlist` and `/feedback`. The news
+  fetcher moved to `src/lib/news-fetcher.ts`, because the auto-trade earnings
+  gate and Telegram `/earnings` use it.
+- **Research pages:** the 11 pages, their API routes, and the libraries only
+  they used (evidence framework, filter scorecard, score validation, execution
+  audit and quality). Telegram `/backtest` and `GET /api/backtest` stay.
+- **Settings:** the "Prediction Engine" panel is now "Model Layer". It keeps
+  only the model-assisted ranking toggle (packages/model, advisory). The DB
+  columns for the removed toggles are left in place, so no migration is needed.
+- **One behaviour change:** Kelly sizing was switched on and could shrink
+  *manual* buys in the Buy dialog. Manual buys now use the same position sizer
+  and caps as auto-buys. Auto-trade never used Kelly.
+- **S4:** `prospective_shadow_tests.py` was amended (before any forward outcome
+  existed). It compares the simple CORE rule above with the current A-grade
+  selection on new signals, with FAILX exits and Bonferroni over eight
+  comparisons. Switch only if it reports CORE NOT WORSE.
+
+Not changed: the scan engine, scores, risk gates, sizing, stops, sync, Jev,
+the module system, the VPIN and sentiment panels, and the six modules that were
+already unused before this work (`SystemHeatWidget`, `AddPositionModal`,
+`GateBlockerBreakdown`, `GradeBadge`, `useHealthCheck`, `usePositions`). These
+are follow-ups.
 
 ## Reproduce
 

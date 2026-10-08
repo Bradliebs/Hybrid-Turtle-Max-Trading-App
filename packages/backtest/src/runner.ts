@@ -1,6 +1,6 @@
 /**
  * DEPENDENCIES
- * Consumed by: packages/backtest/src/index.ts, src/app/api/backtests/run/route.ts, src/app/api/backtests/[id]/route.ts, scripts/verify-phase11.ts
+ * Consumed by: packages/backtest/src/index.ts, scripts/verify-phase11.ts
  * Consumes: packages/data/src/prisma.ts, src/lib/dual-score.ts, src/lib/breakout-probability.ts
  * Risk-sensitive: NO
  * Last modified: 2026-03-09

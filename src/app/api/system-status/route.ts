@@ -14,7 +14,6 @@ import prisma from '@/lib/prisma';
 import { apiError } from '@/lib/api-response';
 import { ensureDefaultUser } from '@/lib/default-user';
 import { OPERATING_MODES, type OperatingMode } from '@/types';
-import { getPredictionReadiness } from '@/lib/prediction/readiness-gate';
 import { getT212ApiStats } from '@/lib/position-sync';
 
 type SystemReadiness = 'READY' | 'WARNING' | 'BLOCKED';
@@ -97,21 +96,12 @@ export async function GET() {
     const operatingMode = (user?.operatingMode || 'NORMAL') as OperatingMode;
     const modeConfig = OPERATING_MODES[operatingMode];
 
-    // Prediction engine readiness (advisory — does not affect system readiness)
-    let predictionReadiness;
-    try {
-      predictionReadiness = await getPredictionReadiness();
-    } catch {
-      predictionReadiness = { readiness: 'NO_DATA', closedTrades: 0, tradesNeeded: 30, message: 'Unable to check', canCalibrate: false, canComputeBasicStats: false };
-    }
-
     return NextResponse.json({
       readiness,
       checks,
       operatingMode,
       operatingModeName: modeConfig?.name ?? operatingMode,
       riskProfile: user?.riskProfile ?? 'BALANCED',
-      predictionEngine: predictionReadiness,
       summary: readiness === 'READY'
         ? 'System is healthy and ready to operate.'
         : readiness === 'WARNING'

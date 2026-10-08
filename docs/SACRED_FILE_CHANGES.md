@@ -32,6 +32,14 @@ Each entry uses this shape (newest at top of the History section):
 
 ## History
 
+### 2026-10-08 - pending - auto-trade.ts: news-fetcher import path only (simplification)
+
+- File(s): `src/cron/auto-trade.ts` (two dynamic imports changed from `@/lib/analyst/news-fetcher` to `@/lib/news-fetcher`). The module was moved unchanged (`git mv`) when the AI analyst was removed; `src/cron/nightly.ts` lost the advisory prediction Steps 7b–7f and their imports.
+- Why: Owner-approved simplification (`reports/simplification-inventory-2026-10-08.md`, S1–S3). The earnings gate in auto-trade still needs the news fetcher.
+- Behaviour preserved: Everything. Same function, same file contents, new path. No buy, size, ranking, grading, risk-gate, stop or exit logic changed. Nightly steps removed were advisory (prediction calibration, meta-model, lead-lag, GNN, VRP shadow log); nothing on the trading path read their outputs.
+- Tests: `news-fetcher.test.ts` moved with the module; full suite (154 files, 2098 tests), typecheck, lint and production build pass; independent code review found no trading-path changes.
+- Author: Copilot CLI agent
+
 ### 2026-10-08 - pending - auto-trade.ts: sell failed breakouts automatically
 
 - File(s): `src/cron/auto-trade.ts` (new Step 0 before the operating-mode gate; one import). New `src/lib/failed-breakout-exit.ts` (selection and runner) and `Trading212Client.sellAtMarket` in `src/lib/trading212.ts` (cancel the sell stops, market sell, restore the stops if the sell fails, CRITICAL if the restore fails too).

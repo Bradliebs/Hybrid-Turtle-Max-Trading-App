@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatPrice, formatPercent, formatR, formatDate } from '@/lib/utils';
 import StatusBadge from '@/components/shared/StatusBadge';
 import { canPyramid, PYRAMID_CONFIG } from '@/lib/risk-gates';
 import {apiRequest, formatApiError } from '@/lib/api-client';
 import { Bell, BellOff, Lock, Plus, ArrowUpDown, ChevronDown, X, AlertTriangle, TrendingUp, LogOut, Send, Loader2, CheckCircle, XCircle, RefreshCw, Layers, BookOpen } from 'lucide-react';
-import TradeAdvisorPanel, { useTradeRecommendation } from '@/components/TradeAdvisorPanel';
 
 interface Position {
   id: string;
@@ -49,59 +48,10 @@ interface PositionsTableProps {
   onJournalClick?: (positionId: string) => void;
 }
 
-// ── RL Trade Advisor inline badge for open positions ─────────
-
-const RL_ACTION_STYLES: Record<string, { text: string; bg: string; border: string; label: string; pulse?: boolean }> = {
-  HOLD: { text: 'text-muted-foreground', bg: 'bg-navy-800/40', border: 'border-border/30', label: '⏸ Hold' },
-  TIGHTEN_STOP: { text: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30', label: '🔒 Tighten' },
-  TRAIL_STOP_ATR: { text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', label: '📏 Trail' },
-  FULL_EXIT: { text: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30', label: '🚪 Exit Early', pulse: true },
-  PARTIAL_EXIT_25: { text: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30', label: '💰 Partial 25%' },
-  PARTIAL_EXIT_50: { text: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30', label: '💵 Partial 50%' },
-  PYRAMID_ADD: { text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', label: '📈 Pyramid' },
-};
-
-function PositionRLBadge({ pos, shadowMode = true }: { pos: Position; shadowMode?: boolean }) {
-  const atrEstimate = Math.abs(pos.currentPrice - pos.currentStop);
-  const daysInTrade = Math.max(1, Math.round((Date.now() - new Date(pos.entryDate).getTime()) / (1000 * 60 * 60 * 24)));
-
-  const rlData = useTradeRecommendation({
-    rMultiple: pos.rMultiple,
-    daysInTrade,
-    stopDistanceAtr: atrEstimate > 0 ? (pos.currentPrice - pos.currentStop) / atrEstimate : 1,
-    ncs: 50,
-  });
-
-  if (!rlData.hasResult) return null;
-
-  const actionStyle = RL_ACTION_STYLES[rlData.recommendation] ?? RL_ACTION_STYLES.HOLD;
-  const confPct = Math.round(rlData.confidence * 100);
-
-  return (
-    <span className={cn(
-      'inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium border',
-      actionStyle.bg, actionStyle.border, actionStyle.text,
-      actionStyle.pulse && 'animate-pulse',
-      shadowMode && 'opacity-60'
-    )} title={`RL Advisor${shadowMode ? ' (shadow)' : ''}: ${rlData.label} (${confPct}% confidence)`}>
-      {actionStyle.label} {confPct}%{shadowMode && ' 👁'}
-    </span>
-  );
-}
-
 export default function PositionsTable({ positions, onUpdateStop, onExitPosition, onJournalClick }: PositionsTableProps) {
   const [tab, setTab] = useState<'all' | 'open' | 'closed'>('open');
   const [sortField, setSortField] = useState<string>('ticker');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-
-  // RL Shadow Mode setting — controls whether RL badges are advisory-only
-  const [rlShadowMode, setRlShadowMode] = useState(true);
-  useEffect(() => {
-    fetch('/api/settings?userId=default-user')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.rlShadowMode !== undefined) setRlShadowMode(d.rlShadowMode); })
-      .catch(() => { /* default ON */ });
-  }, []);
 
   // Stop modal state
   const [stopModal, setStopModal] = useState<Position | null>(null);
@@ -317,10 +267,6 @@ export default function PositionsTable({ positions, onUpdateStop, onExitPosition
                   <div>
                     <span className="text-primary-400 font-semibold">{pos.ticker}</span>
                     <div className="text-xs text-muted-foreground">{pos.name}</div>
-                    {/* RL Trade Advisor badge — inline on open positions */}
-                    {pos.status === 'OPEN' && (
-                      <PositionRLBadge pos={pos} shadowMode={rlShadowMode} />
-                    )}
                   </div>
                 </td>
                 <td>

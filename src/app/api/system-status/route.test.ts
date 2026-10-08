@@ -29,9 +29,6 @@ vi.mock('@/lib/prisma', () => ({
 }));
 vi.mock('@/lib/default-user', () => ({ ensureDefaultUser: vi.fn().mockResolvedValue('default-user') }));
 vi.mock('@/lib/position-sync', () => ({ getT212ApiStats: () => mocks.apiStats() }));
-vi.mock('@/lib/prediction/readiness-gate', () => ({
-  getPredictionReadiness: vi.fn().mockResolvedValue({ readiness: 'NO_DATA' }),
-}));
 
 import { GET } from './route';
 

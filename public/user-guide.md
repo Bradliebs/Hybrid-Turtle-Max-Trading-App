@@ -118,10 +118,7 @@ Set or verify:
 - risk profile
 - Trading 212 connection details
 - market data provider (Yahoo or EODHD)
-- prediction engine toggles:
-  - Show intraday NCS updates (default: ON)
-  - Apply Kelly multiplier to sizing (default: OFF)
-  - RL Shadow Mode — advisory only vs active (default: ON/advisory)
+- model layer toggle: model-assisted ranking (advisory only — never changes execution)
 
 ## Trade Log (`/trade-log`)
 Use this to review past trades and learn.
@@ -141,52 +138,6 @@ Shows:
 - pyramid-up signals
 - nightly summaries and system events
 - mark individual or all notifications as read
-
-## Backtest (`/backtest`)
-Use this to audit signal quality.
-
-Shows:
-- historical trigger hits replayed with forward R-multiples
-- win rate, average R, and stop-hit statistics
-- filter by sleeve, regime, or action type
-- requires nightly snapshot history to populate
-
-## Signal Audit (`/signal-audit`)
-Use this to check which signals are adding unique value.
-
-Shows:
-- mutual information heatmap (which signal pairs overlap)
-- conditional MI bar chart (unique contribution per signal)
-- recommendations: KEEP / INVESTIGATE / REDUNDANT per signal
-- click "Run Analysis" to compute — not automatic
-
-## Causal Audit (`/causal-audit`)
-Use this to find which signals work across all market regimes.
-
-Shows:
-- invariance scores per signal (causal vs regime-dependent)
-- beta coefficients per regime environment
-- recommendations for signals that may be spurious
-- click "Run IRM Analysis" to compute
-
-## Execution Quality (`/execution-quality`)
-Use this to measure fill quality and timing.
-
-Shows:
-- average slippage percentage and cost
-- worst fills table
-- timing recommendations by market cap tier
-- best execution windows
-
-## Trade Pulse (`/trade-pulse/[ticker]`)
-Use this for a full unified confidence analysis of any candidate.
-
-Shows:
-- overall TradePulse score (0–100) and grade (A+ to D)
-- signal grid with per-signal contribution scores
-- concerns panel (risks flagged in red/amber)
-- opportunities panel (confirming signals in green)
-- accessed via "Full Analysis →" link on ticker cards in the Plan page
 
 ---
 

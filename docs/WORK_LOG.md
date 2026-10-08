@@ -1442,3 +1442,37 @@ sold at the first session after the nightly flag.
   release, and the second round said "Safe to ship: YES".
 - The other holdout ideas (NCS ordering, FWS, waiting for pullbacks) were not
   adopted, because they didn't hold on untouched data.
+
+## 2026-10-08 Simplification: prediction engine, AI analyst and research pages removed
+
+The owner asked whether the app should be simpler, then said "go with your
+recommendation" (S1–S4 in
+[the simplification report](../reports/simplification-inventory-2026-10-08.md)).
+- **Removed:** about 139 files and 28,900 lines.
+  - **S1:** the prediction/ML engine, its API and UI panels, Kelly sizing in the
+    manual Buy dialog, the RL badge, the Danger and TDA badges, and nightly
+    Steps 7b–7f.
+  - **S2:** the AI analyst and seven Telegram commands.
+  - **S3:** 11 research and audit pages, plus the libraries only they used.
+  - All of it is recoverable from git history.
+- **Corrections:** the inventory had said prediction was "not reached by
+  trading"; nightly did retrain it, though auto-trade never imported it.
+  TRADING-LOGIC.md had claimed the prediction layers could block Auto-Yes, which
+  did not match the code.
+- **Kept:** the news fetcher (moved to `src/lib/news-fetcher.ts` for the
+  earnings gate), `GET /api/backtest` (Telegram `/backtest`), packages/model
+  (the Settings "Model Layer" toggle), VPIN and sentiment panels, and the module
+  system.
+- **One behaviour change:** manual buys no longer get Kelly-reduced sizes
+  (the setting was on). Auto-trade never used Kelly.
+- **S4:** `prospective_shadow_tests.py` was amended before any forward outcome
+  existed. It compares a simple CORE rule (bullish, above MA200, ADX > 20,
+  triggered without chasing more than 0.8 ATR, FAILX exits) with the A-grade
+  selection. Bonferroni is now over eight comparisons; switch only on CORE NOT
+  WORSE. A June smoke run (not evidence) showed CORE +0.08R (n=196) and A-grade
+  +0.08R (n=27).
+- **Follow-ups:**
+  - six modules that were unused before this work;
+  - the Plan page's live-price request returns 400 (likely more than 50 tickers);
+  - system-status reports "T212 Sync 385h ago";
+  - every stored Scan has regime BULLISH.

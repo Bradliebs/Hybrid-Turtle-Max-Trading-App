@@ -4,10 +4,7 @@
  * Consumes: /api/settings (GET + PUT)
  * Risk-sensitive: NO — user preferences only
  * Last modified: 2026-03-07
- * Notes: Prediction engine toggle settings.
- *        - Show intraday NCS updates (controls LiveNCSTracker)
- *        - Apply Kelly multiplier (controls KellySizePanel)
- *        - RL Shadow Mode (controls TradeAdvisorPanel mode)
+ * Notes: Model-assisted ranking toggle (packages/model overlay, advisory only).
  */
 
 'use client';
@@ -18,17 +15,11 @@ import { Brain, Loader2, Save, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface PredictionSettings {
-  showIntradayNCS: boolean;
-  applyKellyMultiplier: boolean;
-  rlShadowMode: boolean;
   modelLayerEnabled: boolean;
 }
 
 export default function PredictionPanel() {
   const [settings, setSettings] = useState<PredictionSettings>({
-    showIntradayNCS: true,
-    applyKellyMultiplier: false,
-    rlShadowMode: true,
     modelLayerEnabled: false,
   });
   const [loading, setLoading] = useState(true);
@@ -41,9 +32,6 @@ export default function PredictionPanel() {
       try {
         const data = await apiRequest<PredictionSettings>('/api/settings?userId=default-user');
         setSettings({
-          showIntradayNCS: data.showIntradayNCS ?? true,
-          applyKellyMultiplier: data.applyKellyMultiplier ?? false,
-          rlShadowMode: data.rlShadowMode ?? true,
           modelLayerEnabled: data.modelLayerEnabled ?? false,
         });
       } catch {
@@ -81,7 +69,7 @@ export default function PredictionPanel() {
   if (loading) {
     return (
       <div className="card-surface p-6 flex items-center gap-3 text-muted-foreground">
-        <Loader2 className="w-4 h-4 animate-spin" /> Loading prediction settings...
+        <Loader2 className="w-4 h-4 animate-spin" /> Loading model settings...
       </div>
     );
   }
@@ -91,45 +79,18 @@ export default function PredictionPanel() {
       <div className="px-6 py-4 border-b border-border/30 flex items-center gap-3">
         <Brain className="w-5 h-5 text-primary-400" />
         <div>
-          <h2 className="font-semibold text-foreground">Prediction Engine</h2>
-          <p className="text-xs text-muted-foreground">Configure prediction layers and AI features</p>
+          <h2 className="font-semibold text-foreground">Model Layer</h2>
+          <p className="text-xs text-muted-foreground">Advisory ranking overlay for scan candidates</p>
         </div>
       </div>
 
       <div className="p-6 space-y-5">
-        {/* Toggle: Show intraday NCS updates */}
         <ToggleRow
           label="Enable model-assisted ranking"
           description="Adds an advisory model score, breakout probability, and blended ranking to scan candidates. Execution rules remain deterministic."
           checked={settings.modelLayerEnabled}
           onChange={() => handleToggle('modelLayerEnabled')}
           warning={settings.modelLayerEnabled ? 'Model overlay active — candidates will show blended ranking, but hard risk and stop logic remain unchanged' : undefined}
-        />
-
-        {/* Toggle: Show intraday NCS updates */}
-        <ToggleRow
-          label="Show intraday NCS updates"
-          description="Display real-time NCS tracking during UK trading hours (08:00–16:30)"
-          checked={settings.showIntradayNCS}
-          onChange={() => handleToggle('showIntradayNCS')}
-        />
-
-        {/* Toggle: Apply Kelly multiplier */}
-        <ToggleRow
-          label="Apply Kelly multiplier to sizing"
-          description="Use Kelly Criterion to adjust position sizes based on prediction confidence. Currently advisory only."
-          checked={settings.applyKellyMultiplier}
-          onChange={() => handleToggle('applyKellyMultiplier')}
-          warning={settings.applyKellyMultiplier ? 'Kelly sizing active — position sizes may be reduced based on uncertainty' : undefined}
-        />
-
-        {/* Toggle: RL Shadow Mode */}
-        <ToggleRow
-          label="RL Shadow Mode"
-          description="When ON (default): RL trade advisor shows recommendations only. When OFF: RL TIGHTEN/TRAIL actions pre-fill the stop update UI."
-          checked={settings.rlShadowMode}
-          onChange={() => handleToggle('rlShadowMode')}
-          warning={!settings.rlShadowMode ? 'Active mode — RL recommendations will pre-fill stop adjustments for confirmation' : undefined}
         />
 
         {/* Save button */}

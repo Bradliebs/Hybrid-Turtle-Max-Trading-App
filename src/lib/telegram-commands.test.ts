@@ -2,12 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { parseCommand } from './telegram-commands';
 
 describe('parseCommand', () => {
-  it('parses /watchlist command', () => {
-    expect(parseCommand('/watchlist')).toBe('/watchlist');
-  });
-
-  it('parses /feedback command', () => {
-    expect(parseCommand('/feedback')).toBe('/feedback');
+  it('treats the removed AI and research commands as unknown', () => {
+    for (const removed of ['/watchlist', '/feedback', '/analyst', '/news AAPL', '/ask hi', '/explain AAPL', '/scorecard']) {
+      expect(parseCommand(removed)).toBe('unknown');
+    }
   });
 
   it('parses existing commands correctly', () => {
@@ -17,13 +15,8 @@ describe('parseCommand', () => {
     expect(parseCommand('/regime')).toBe('/regime');
     expect(parseCommand('/risk')).toBe('/risk');
     expect(parseCommand('/candidates')).toBe('/candidates');
-    expect(parseCommand('/analyst')).toBe('/analyst');
     expect(parseCommand('/help')).toBe('/help');
     expect(parseCommand('/start')).toBe('/help');
-    expect(parseCommand('/news AAPL')).toBe('/news');
-    expect(parseCommand('/ask what is going on?')).toBe('/ask');
-    expect(parseCommand('/explain AAPL')).toBe('/explain');
-    expect(parseCommand('/scorecard')).toBe('/scorecard');
     expect(parseCommand('/earnings')).toBe('/earnings');
     expect(parseCommand('/briefing')).toBe('/briefing');
     expect(parseCommand('/stops')).toBe('/stopsdue');
@@ -38,7 +31,7 @@ describe('parseCommand', () => {
 
   it('handles case-insensitive and extra whitespace', () => {
     expect(parseCommand('/STATUS')).toBe('/status');
-    expect(parseCommand('  /watchlist  ')).toBe('/watchlist');
-    expect(parseCommand('/FEEDBACK  ')).toBe('/feedback');
+    expect(parseCommand('  /positions  ')).toBe('/positions');
+    expect(parseCommand('/EARNINGS  ')).toBe('/earnings');
   });
 });

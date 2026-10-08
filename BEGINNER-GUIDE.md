@@ -134,7 +134,7 @@ Telegram sends trade confirmations, daily summaries and warnings to your phone.
 
 ### 5.3 Leave the rest alone for now
 
-**Market Data** (Yahoo Finance is fine), **System** and **Prediction Engine** can stay on their defaults. **Safety Controls** is covered in Path C.
+**Market Data** (Yahoo Finance is fine), **System** and **Model Layer** can stay on their defaults. **Safety Controls** is covered in Path C.
 
 ---
 

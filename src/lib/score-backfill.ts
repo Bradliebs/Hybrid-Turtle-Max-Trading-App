@@ -1,6 +1,6 @@
 /**
  * DEPENDENCIES
- * Consumed by: /api/analytics/score-validation/route.ts (POST backfill)
+ * Consumed by: src/cron/research-refresh.ts
  * Consumes: prisma.ts, dual-score.ts
  * Risk-sensitive: NO — analytics only, backfills score data
  * Last modified: 2026-03-06

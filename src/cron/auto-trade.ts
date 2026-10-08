@@ -1156,7 +1156,7 @@ async function sendSessionSummary(
       const candidateTickers = eligible.slice(0, 5).map(c => c.ticker);
       const allTickers = [...new Set([...holdingTickers, ...candidateTickers])];
       if (allTickers.length > 0) {
-        const { fetchBatchNewsContext } = await import('@/lib/analyst/news-fetcher');
+        const { fetchBatchNewsContext } = await import('@/lib/news-fetcher');
         const results = await fetchBatchNewsContext(allTickers, 0);
         const upcoming = results
           .filter(r => r.earnings.daysUntil != null && r.earnings.daysUntil <= 7)
@@ -1663,7 +1663,7 @@ async function runAutoTrade(session: Session) {
   const earningsDeferredTickers = new Set<string>();
 
   try {
-    const { fetchBatchNewsContext } = await import('@/lib/analyst/news-fetcher');
+    const { fetchBatchNewsContext } = await import('@/lib/news-fetcher');
     const candidateTickers = readyCandidates.slice(0, 5).map(c => c.ticker);
     if (candidateTickers.length > 0) {
       const newsResults = await fetchBatchNewsContext(candidateTickers, 0); // 0 headlines — only need earnings

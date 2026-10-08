@@ -1,6 +1,6 @@
 /**
  * DEPENDENCIES
- * Consumed by: analyst-service.ts, /api/analyst/news/route.ts
+ * Consumed by: src/cron/auto-trade.ts (earnings gate), src/lib/telegram-commands.ts
  * Consumes: yahoo-finance2 (already installed, free, no API key)
  * Risk-sensitive: NO — read-only public news + calendar data, no trade execution
  * Notes: Free internet-context fetcher. Pulls public Yahoo Finance news headlines

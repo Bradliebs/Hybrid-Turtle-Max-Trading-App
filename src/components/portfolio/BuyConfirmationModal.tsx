@@ -23,14 +23,12 @@ import { getBuyButtonState } from '@/lib/ready-to-buy';
 import { getDayOfWeek } from '@/lib/utils';
 import type { TriggerMetCandidate } from '@/lib/ready-to-buy';
 import type { PositionSizingResult } from '@/types';
-import { RISK_PROFILES, type ExecutionMode, type RiskProfileType } from '@/types';
+import type { ExecutionMode } from '@/types';
 import type { CorrelationScalarResult } from '@/lib/correlation-scalar';
 import { applyCorrelationScalar } from '@/lib/correlation-scalar';
 import { useStore } from '@/store/useStore';
 import WhyCardPopover, { WhyCardProvider } from '@/components/shared/WhyCardPopover';
 import { RISK_GATE_EXPLANATIONS } from '@/lib/why-explanations';
-import KellySizePanel, { useKellySize } from '@/components/KellySizePanel';
-import { calculatePositionSize } from '@/lib/position-sizer';
 import {
   MANUAL_CHECKLIST_ITEMS,
   AUTO_CHECKLIST_ITEMS,
@@ -52,7 +50,6 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckSquare,
-  Calculator,
 } from 'lucide-react';
 
 const DEFAULT_USER_ID = 'default-user';
@@ -130,8 +127,8 @@ export default function BuyConfirmationModal({
   const [modalPhase, setModalPhase] = useState<'checklist' | 'confirm'>('checklist');
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
 
-  // Read regime and Kelly setting from global store
-  const { marketRegime, applyKellyMultiplier, riskProfile: storeRiskProfile } = useStore();
+  // Read regime from global store
+  const { marketRegime } = useStore();
 
   // Auto-verified checks — system determines these, user cannot toggle
   const autoChecks = useMemo(() => {
@@ -201,11 +198,8 @@ export default function BuyConfirmationModal({
   });
   const [corrLoading, setCorrLoading] = useState(false);
 
-  // Profile risk — used as Kelly maxRisk cap (avoids circular dependency with sizing)
-  const profileRiskPerTrade = RISK_PROFILES[storeRiskProfile as RiskProfileType]?.riskPerTrade ?? 2;
-
-  // Position sizing (base — before Kelly and correlation adjustment)
-  const baseSizing = useMemo<PositionSizingResult | null>(() => {
+  // Position sizing (before correlation adjustment)
+  const sizing = useMemo<PositionSizingResult | null>(() => {
     try {
       if (!candidate.scanPrice || !candidate.scanStopPrice) return null;
       if (candidate.scanStopPrice >= candidate.scanPrice) return null;
@@ -214,41 +208,6 @@ export default function BuyConfirmationModal({
       return null;
     }
   }, [candidate.scanPrice, candidate.scanStopPrice, sizePosition]);
-
-  // Kelly sizing — uses profile's fixed risk as cap (not computed sizing risk%)
-  const kellyData = useKellySize(candidate.dualNCS != null ? {
-    ncs: candidate.dualNCS,
-    maxRisk: profileRiskPerTrade,
-  } : null);
-
-  // When Kelly is enabled and suggests lower risk, recompute sizing with Kelly's risk%
-  // Kelly can only REDUCE position size, never increase beyond profile max
-  const sizing = useMemo<PositionSizingResult | null>(() => {
-    if (!baseSizing) return null;
-    if (!applyKellyMultiplier) return baseSizing;
-    if (!kellyData.hasResult || !kellyData.hasEdge) return baseSizing;
-    if (kellyData.suggestedRiskPercent >= profileRiskPerTrade) return baseSizing;
-    // Kelly suggests smaller position — recompute with Kelly's risk%
-    try {
-      if (!candidate.scanPrice || !candidate.scanStopPrice) return baseSizing;
-      return calculatePositionSize({
-        equity,
-        riskProfile: storeRiskProfile as RiskProfileType,
-        entryPrice: candidate.scanPrice,
-        stopPrice: candidate.scanStopPrice,
-        customRiskPercent: kellyData.suggestedRiskPercent,
-        allowFractional: true,
-      });
-    } catch {
-      return baseSizing;
-    }
-  }, [baseSizing, applyKellyMultiplier, kellyData.hasResult, kellyData.hasEdge,
-      kellyData.suggestedRiskPercent, profileRiskPerTrade, candidate.scanPrice,
-      candidate.scanStopPrice, equity, storeRiskProfile]);
-
-  // Track whether Kelly actually reduced the position
-  const kellyApplied = applyKellyMultiplier && kellyData.hasResult && kellyData.hasEdge
-    && kellyData.suggestedRiskPercent < profileRiskPerTrade && sizing !== baseSizing;
 
   // Adjusted shares after correlation scalar
   const adjustedShares = useMemo(() => {
@@ -1085,19 +1044,6 @@ export default function BuyConfirmationModal({
                   <AlertTriangle className="w-4 h-4" />
                   Could not calculate position size — check entry/stop values
                 </div>
-              )}
-
-              {/* Kelly sizing — shows advisory + applied indicator */}
-              {kellyData.hasResult && (
-                <>
-                  <KellySizePanel data={kellyData} />
-                  {kellyApplied && (
-                    <div className="text-xs text-amber-400 flex items-center gap-1.5 -mt-1">
-                      <Calculator className="w-3 h-3" />
-                      Kelly applied — risk reduced to {kellyData.suggestedRiskPercent.toFixed(2)}% (from {profileRiskPerTrade}%)
-                    </div>
-                  )}
-                </>
               )}
 
               {/* Risk budget context */}

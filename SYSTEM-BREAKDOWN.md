@@ -1,5 +1,8 @@
 # HybridTurtle — System Breakdown
 
+> **October 2026 simplification:** the prediction engine (`src/lib/prediction/**`, `/api/prediction/*`, `/prediction-status`), the AI analyst (`src/lib/analyst/**`, `/api/analyst/*`), and the research pages `/backtest`, `/signal-audit`, `/causal-audit`, `/execution-quality`, `/execution-audit`, `/filter-scorecard`, `/score-validation`, `/breakout-evidence`, `/evidence`, `/trade-pulse`, `/watchlist-news` were removed, together with their components (Kelly, TradePulse, TDA badge, danger level, RL advisor). Sections below that describe them are historical. The prediction DB tables are left in place (no migration). See `reports/simplification-inventory-2026-10-08.md`.
+
+
 > Complete technical reference for the HybridTurtle systematic trading dashboard.  
 > Every number in this document is counted from actual code — not estimated.
 

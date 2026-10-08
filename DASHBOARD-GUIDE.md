@@ -531,37 +531,9 @@ Centralised inbox for trade alerts, stop warnings, and nightly pipeline outputs.
 
 ---
 
-## 12. Backtest — Signal Replay
+## 12. Backtest — Removed
 
-URL: `/backtest`
-
-Read-only signal quality audit. Replays historical trigger hits from snapshot data with forward R-multiples and stop ladder simulation.
-
-### Summary Cards (5)
-
-Total Signals, With Outcomes (%), Win Rate (20d), Avg R (20d), Stops Hit (count + %).
-
-### Filters
-
-Ticker search, sleeve dropdown (Stock Core / ETF Core / High Risk / Hedge), regime dropdown, action dropdown (Auto-Yes / Conditional / Auto-No). Sortable columns.
-
-### Signal Table Columns
-
-| Column | Description |
-|--------|------------|
-| Date | Signal date |
-| Ticker | Symbol + name |
-| Regime | Badge (Bullish / Sideways / Bearish) |
-| Entry / Stop / Risk | Entry price, stop level, risk per share |
-| BQS / FWS / NCS | Dual-score components |
-| BPS | Breakout Probability Score (0–19) |
-| Action | Auto-Yes / Conditional / Auto-No |
-| 5d / 10d / 20d R | Forward R-multiples at 5, 10, 20 day windows |
-| Max Favourable R | Best R reached |
-| Max Adverse R | Worst drawdown in R |
-| Stop Hit | ✕ with R-level if hit, ✓ if survived |
-
-> Build snapshot history by running the nightly pipeline. Signals require at least one snapshot sync to appear.
+The `/backtest` signal-replay page was removed in the October 2026 simplification. The `GET /api/backtest` endpoint remains for the Telegram `/backtest` command.
 
 ---
 
@@ -811,7 +783,7 @@ Or call the API directly: `POST /api/nightly` with `{"userId": "default-user"}`.
 
 | Route | Method | Purpose |
 |-------|--------|--------|
-| `POST /api/backtest` | POST | Run signal replay backtest |
+| `GET /api/backtest` | GET | Run signal replay backtest (used by Telegram `/backtest`) |
 | `GET /api/ev-stats?userId=X` | GET | Expected value statistics |
 ### Hedge
 
@@ -840,10 +812,9 @@ These are hardcoded into the system and cannot be overridden:
 
 ---
 
-## 18. Module System — 16 Active Risk & Analysis Modules + Prediction Engine
+## 18. Module System — 16 Active Risk & Analysis Modules
 
 All modules run via `GET /api/modules?userId=X` and report to the Dashboard's Module Status Panel.
-The prediction engine runs as a separate post-processing layer — see section 19 below.
 
 > **Note:** Module numbering has intentional gaps — modules 1, 4, and 6 are retired/removed. The 16 active modules are listed below.
 
@@ -872,40 +843,11 @@ The prediction engine runs as a separate post-processing layer — see section 1
 
 ---
 
-## 19. Prediction Engine — 17 Post-Processing Phases + Phase 6 ML
+## 19. Removed: Prediction Engine and AI Analyst (October 2026)
 
-The prediction engine adds confidence intervals, failure detection, and advanced scoring on top of the core scan/NCS pipeline. All phases are **post-processing only** — they never modify sacred files.
+The advisory prediction engine (conformal intervals, failure modes, signal weighting, stress test, immune system/danger level, lead-lag, GNN, Bayesian beliefs, RL advisor, Kelly sizing, causal audit, TDA badge, TradePulse, Phase 6 ridge model) and the AI analyst were removed in the October 2026 simplification. None of them were on the auto-trade path. See `reports/simplification-inventory-2026-10-08.md`.
 
-| Phase | Feature | What It Shows |
-|-------|---------|--------------|
-| 1 | Conformal Intervals | NCS score wrapped in confidence bands (e.g. "67.3 [61.1–73.5]") |
-| 2 | Failure Mode Scoring | 5 independent failure modes (breakout, liquidity, correlation, regime, event) |
-| 3 | Dynamic Signal Weighting | Weight bars showing regime-adjusted signal importance |
-| 4 | Adversarial Stress Test | Monte Carlo stop-hit probability gauge |
-| 5 | Signal Pruning Audit | `/signal-audit` page — mutual information analysis |
-| 6 | Immune System | Danger level indicator in navbar — matches current conditions to historical crises |
-| 7 | Lead-Lag Graph | Upstream asset movement signals with NCS adjustment |
-| 8 | GNN | Graph neural network scoring from cross-asset propagation |
-| 9 | Bayesian Beliefs | 7×4 grid of signal reliability per regime |
-| 10 | Meta-RL Advisor | Trade management recommendations (HOLD/TIGHTEN/EXIT) |
-| 11 | Kelly Sizing | Kelly Criterion position size suggestion vs fixed risk |
-| 12 | VPIN Order Flow | Directional order flow imbalance indicator |
-| 13 | Sentiment | News + analyst revision + short interest composite |
-| 14 | Causal Invariance | `/causal-audit` page — identifies regime-stable vs spurious signals |
-| 15 | TDA Regime | Topological Data Analysis regime stability badge — divergence warning vs primary detector |
-| 16 | Execution Quality | Slippage analysis, timing recommendations, worst fills — `/execution-quality` page |
-| P6 | Phase 6 Ridge Regression | ML model predicting R-multiple from 16 signal features — advisory ranking on `/prediction-status` |
-
-**New pages:**
-- `/signal-audit` — Run mutual information analysis on signal layers
-- `/causal-audit` — IRM analysis showing causal vs regime-dependent signals
-- `/execution-quality` — Slippage analysis and execution timing recommendations
-- `/trade-pulse/[ticker]` — Full unified confidence dashboard per ticker (A+ to D grading)
-
-**New settings (Settings → Prediction Engine):**
-- Show intraday NCS updates (default: ON)
-- Apply Kelly multiplier to sizing (default: OFF)
-- RL Shadow Mode (default: ON — advisory only)
+Still available (advisory only): VPIN and sentiment panels on the Plan page (advanced view), and the model-assisted ranking toggle in Settings → Model Layer.
 
 ---
 

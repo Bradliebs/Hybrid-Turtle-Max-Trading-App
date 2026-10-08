@@ -720,21 +720,7 @@ export const MAIN_NAV_ITEMS: NavEntry[] = [
   {
     label: 'Analysis',
     children: [
-      { label: 'Trade Pulse', href: '/trade-pulse' },
-      { label: 'Signals', href: '/backtest' },
-      { label: 'Scorecard', href: '/filter-scorecard' },
-      { label: 'Score Lab', href: '/score-validation' },
-      { label: 'Breakout Evidence', href: '/breakout-evidence' },
-      { label: 'Prediction', href: '/prediction-status' },
       { label: 'Price Accuracy', href: '/price-accuracy' },
-      { label: 'Watchlist News', href: '/watchlist-news' },
-    ],
-  },
-  {
-    label: 'Performance',
-    children: [
-      { label: 'Execution Quality', href: '/execution-quality' },
-      { label: 'Exec Audit', href: '/execution-audit' },
     ],
   },
   {
@@ -745,8 +731,6 @@ export const MAIN_NAV_ITEMS: NavEntry[] = [
       { label: 'Stops', href: '/stops' },
       { label: 'Orders', href: '/orders' },
       { label: 'Jobs', href: '/jobs' },
-      { label: 'Signal Audit', href: '/signal-audit' },
-      { label: 'Causal Audit', href: '/causal-audit' },
       { label: 'Trade Log', href: '/trade-log' },
       { label: 'Journal', href: '/journal' },
       { label: 'Settings', href: '/settings' },

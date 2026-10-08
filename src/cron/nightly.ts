@@ -67,12 +67,6 @@ import { createCronLogger } from '@/lib/cron-logger';
 import { getUKDayOfWeek } from '@/lib/uk-time';
 import { saveScoreBreakdowns } from '@/lib/score-tracker';
 import { scoreRow, normaliseRow } from '@/lib/dual-score';
-import { runFullCalibration } from '@/lib/prediction/bootstrap-calibration';
-import { runTraining as runMetaModelTraining } from '@/lib/prediction/meta-model-trainer';
-import { recomputeLeadLagGraph } from '@/lib/prediction/lead-lag-graph';
-import { runGNNTraining } from '@/lib/prediction/gnn/gnn-trainer';
-import { buildCurrentEnvironment } from '@/lib/prediction/environment-encoder';
-import { computeVrp } from '@/lib/prediction/variance-risk-premium';
 import { RISK_PROFILES, EQUITY_REVIEW_THRESHOLDS, type RiskProfileType, type Sleeve } from '@/types';
 import { randomUUID } from 'node:crypto';
 import { claimExecutionIntent, hashExecutionPayload, hasActiveBrokerSubmissionLease, updateExecutionIntent } from '@/lib/execution-intent';
@@ -2303,105 +2297,6 @@ async function runNightlyProcess() {
       } catch (error) {
         console.warn('  [7d] Weekly summary alert failed:', (error as Error).message);
       }
-    }
-
-    // Step 7b: Conformal calibration recalibration (non-critical)
-    console.log('  [7b] Checking conformal calibration...');
-    try {
-      const calResult = await runFullCalibration(null, false);
-      if (calResult.calibrated) {
-        console.log(`        Recalibrated: ${calResult.sampleSize} samples across ${calResult.coverageLevels.length} coverage levels`);
-        await sendAlert({
-          type: 'CALIBRATION_COMPLETE',
-          title: 'NCS Calibration Complete',
-          message: `Conformal calibration updated: ${calResult.sampleSize} samples, ${calResult.coverageLevels.length} coverage levels`,
-          priority: 'INFO',
-          skipTelegram: true,
-        });
-      } else {
-        console.log(`        Skipped: ${calResult.skippedReason ?? 'unknown reason'}`);
-      }
-    } catch (error) {
-      // Non-critical — calibration failure should not affect the pipeline
-      console.warn('  [7b] Conformal calibration failed:', (error as Error).message);
-    }
-
-    // Step 7c: Signal weight meta-model training (weekly, Sunday only)
-    const ukDay = getUKDayOfWeek();
-    if (ukDay === 0) {
-      console.log('  [7c] Running weekly signal weight training...');
-      try {
-        const trainResult = await runMetaModelTraining(false);
-        if (trainResult.trained) {
-          console.log(`        Trained: source=${trainResult.source}, outcomes=${trainResult.outcomeCount}`);
-          await sendAlert({
-            type: 'SIGNAL_WEIGHTS_SHIFTED',
-            title: 'Signal Weights Updated',
-            message: `Meta-model retrained: source=${trainResult.source}, ${trainResult.outcomeCount} outcomes`,
-            priority: 'INFO',
-            skipTelegram: true,
-          });
-        } else {
-          console.log(`        Skipped: ${trainResult.reason ?? 'unknown reason'}`);
-        }
-      } catch (error) {
-        // Non-critical — training failure should not affect the pipeline
-        console.warn('  [7c] Signal weight training failed:', (error as Error).message);
-      }
-    }
-
-    // Step 7d: Lead-lag graph recomputation (weekly, Sunday only)
-    if (ukDay === 0) {
-      console.log('  [7d] Recomputing lead-lag graph...');
-      try {
-        const llResult = await recomputeLeadLagGraph(50);
-        console.log(`        Found ${llResult.edgesFound} edges across ${llResult.tickersProcessed} tickers`);
-      } catch (error) {
-        // Non-critical — lead-lag failure should not affect the pipeline
-        console.warn('  [7d] Lead-lag graph computation failed:', (error as Error).message);
-      }
-    }
-
-    // Step 7e: GNN training (weekly, Sunday only, after lead-lag graph is fresh)
-    if (ukDay === 0) {
-      console.log('  [7e] Running GNN training...');
-      try {
-        const gnnResult = await runGNNTraining(false);
-        if (gnnResult.trained) {
-          console.log(`        GNN trained: loss=${gnnResult.finalLoss.toFixed(4)}, samples=${gnnResult.sampleSize}`);
-        } else {
-          console.log(`        GNN skipped: ${gnnResult.reason ?? 'unknown'}`);
-        }
-      } catch (error) {
-        console.warn('  [7e] GNN training failed:', (error as Error).message);
-      }
-    }
-
-    // Step 7f: Variance risk premium shadow log (advisory only — nothing reads it)
-    console.log('  [7f] Logging variance risk premium (shadow)...');
-    try {
-      const vrpEnv = await buildCurrentEnvironment();
-      const vrpResult = computeVrp(vrpEnv.vix, vrpEnv.spyVolatilityRealised10d);
-      const { appendFileSync, mkdirSync } = await import('node:fs');
-      const { join } = await import('node:path');
-      const dir = join(process.cwd(), 'data');
-      mkdirSync(dir, { recursive: true });
-      appendFileSync(
-        join(dir, 'vrp-shadow.jsonl'),
-        JSON.stringify({
-          timestamp: new Date().toISOString(),
-          vix: vrpEnv.vix,
-          realisedVol10dAnnualised: vrpEnv.spyVolatilityRealised10d,
-          vrp: vrpResult.vrp,
-          state: vrpResult.state,
-          approximatePercentile: vrpResult.approximatePercentile,
-        }) + '\n',
-        'utf8'
-      );
-      console.log(`        VRP ${vrpResult.vrp.toFixed(2)} (${vrpResult.state})`);
-    } catch (error) {
-      // Non-critical — shadow logging must never affect the pipeline
-      console.warn('  [7f] VRP shadow log failed:', (error as Error).message);
     }
 
     // Step 8: Send Telegram summary (isolated — failure doesn't block heartbeat)

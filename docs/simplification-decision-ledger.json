@@ -4,7 +4,7 @@
   "status": "RETIREMENT_BATCH_1_COMPLETE",
   "scope": {
     "featureFlags": 0,
-    "secondaryNavigationDestinations": 20,
+    "secondaryNavigationDestinations": 9,
     "totalEntries": 23
   },
   "evidenceLimits": [
@@ -94,15 +94,18 @@
       "label": "Trade Pulse",
       "path": "/trade-pulse",
       "systemJob": "Review",
-      "disposition": "QUARANTINE",
+      "disposition": "RETIRE",
       "confidence": "MEDIUM",
       "risk": "ADVISORY",
       "operatorEvidence": "MISSING",
       "evidence": [
         "The view aggregates cross-reference, danger, prediction, and analyst outputs.",
-        "Only 20 closed positions exist, below the 30-trade calibration threshold."
+        "Only 20 closed positions exist, below the 30-trade calibration threshold.",
+        "Removed 2026-10-08 in the owner-approved simplification (reports/simplification-inventory-2026-10-08.md)."
       ],
-      "nextGate": "Ask whether this view changed a trade-review decision in the last 30 days; otherwise remove it from primary navigation."
+      "nextGate": "Ask whether this view changed a trade-review decision in the last 30 days; otherwise remove it from primary navigation.",
+      "status": "RETIRED",
+      "retiredAt": "2026-10-08"
     },
     {
       "id": "nav:/backtest",
@@ -110,16 +113,19 @@
       "label": "Signals",
       "path": "/backtest",
       "systemJob": "Learn",
-      "disposition": "KEEP",
+      "disposition": "RETIRE",
       "confidence": "HIGH",
       "risk": "READ_ONLY",
       "operatorEvidence": "PRESENT",
       "evidence": [
         "The navigation label Signals opens the backtest runner.",
         "Seven named replay runs are stored and the current scenario has been used to validate OHLC outcomes, execution costs, concurrency, historical FX, whole-share sizing, and cash reservation.",
-        "The runner remains advisory-only and suppresses portfolio return and drawdown while validity is PARTIAL."
+        "The runner remains advisory-only and suppresses portfolio return and drawdown while validity is PARTIAL.",
+        "Removed 2026-10-08 in the owner-approved simplification (reports/simplification-inventory-2026-10-08.md)."
       ],
-      "nextGate": "Retain as the canonical replay surface; require observed intraday execution evidence before allowing a VALID portfolio verdict."
+      "nextGate": "Retain as the canonical replay surface; require observed intraday execution evidence before allowing a VALID portfolio verdict.",
+      "status": "RETIRED",
+      "retiredAt": "2026-10-08"
     },
     {
       "id": "nav:/filter-scorecard",
@@ -127,15 +133,18 @@
       "label": "Scorecard",
       "path": "/filter-scorecard",
       "systemJob": "Learn",
-      "disposition": "KEEP",
+      "disposition": "RETIRE",
       "confidence": "HIGH",
       "risk": "READ_ONLY",
       "operatorEvidence": "MISSING",
       "evidence": [
         "The view measures outcomes for passed and blocked filters.",
-        "CandidateOutcome and FilterAttribution each contain 58,622 rows."
+        "CandidateOutcome and FilterAttribution each contain 58,622 rows.",
+        "Removed 2026-10-08 in the owner-approved simplification (reports/simplification-inventory-2026-10-08.md)."
       ],
-      "nextGate": "Retain as the canonical filter-effectiveness view; verify operator use before consolidating related evidence pages into it."
+      "nextGate": "Retain as the canonical filter-effectiveness view; verify operator use before consolidating related evidence pages into it.",
+      "status": "RETIRED",
+      "retiredAt": "2026-10-08"
     },
     {
       "id": "nav:/score-validation",
@@ -143,16 +152,19 @@
       "label": "Score Lab",
       "path": "/score-validation",
       "systemJob": "Learn",
-      "disposition": "CONSOLIDATE",
+      "disposition": "RETIRE",
       "confidence": "MEDIUM",
       "risk": "READ_ONLY_WITH_BACKFILL",
       "operatorEvidence": "MISSING",
       "evidence": [
         "The page validates score bands and can trigger a backfill.",
         "ScoreBreakdown contains 81,504 rows.",
-        "Its operator question overlaps the broader evidence and filter-scorecard views."
+        "Its operator question overlaps the broader evidence and filter-scorecard views.",
+        "Removed 2026-10-08 in the owner-approved simplification (reports/simplification-inventory-2026-10-08.md)."
       ],
-      "nextGate": "Choose one canonical evidence destination and preserve backfill as an advanced action."
+      "nextGate": "Choose one canonical evidence destination and preserve backfill as an advanced action.",
+      "status": "RETIRED",
+      "retiredAt": "2026-10-08"
     },
     {
       "id": "nav:/breakout-evidence",
@@ -160,15 +172,18 @@
       "label": "Breakout Evidence",
       "path": "/breakout-evidence",
       "systemJob": "Learn",
-      "disposition": "CONSOLIDATE",
+      "disposition": "RETIRE",
       "confidence": "MEDIUM",
       "risk": "READ_ONLY",
       "operatorEvidence": "MISSING",
       "evidence": [
         "The page reads candidate outcomes for breakout and novel-signal comparisons.",
-        "Its evidence question overlaps the broader evidence framework."
+        "Its evidence question overlaps the broader evidence framework.",
+        "Removed 2026-10-08 in the owner-approved simplification (reports/simplification-inventory-2026-10-08.md)."
       ],
-      "nextGate": "Move distinct breakout comparisons into the canonical evidence destination if operators use them."
+      "nextGate": "Move distinct breakout comparisons into the canonical evidence destination if operators use them.",
+      "status": "RETIRED",
+      "retiredAt": "2026-10-08"
     },
     {
       "id": "nav:/prediction-status",
@@ -176,16 +191,19 @@
       "label": "Prediction",
       "path": "/prediction-status",
       "systemJob": "Learn",
-      "disposition": "QUARANTINE",
+      "disposition": "RETIRE",
       "confidence": "HIGH",
       "risk": "ADVISORY_MODEL_MANAGEMENT",
       "operatorEvidence": "MISSING",
       "evidence": [
         "Only 20 closed positions exist, below the 30-trade calibration threshold.",
         "Several prediction result tables are empty while 201 conformal calibration rows and 13 GNN inference rows exist.",
-        "The page can trigger model training but cannot affect deterministic execution."
+        "The page can trigger model training but cannot affect deterministic execution.",
+        "Removed 2026-10-08 in the owner-approved simplification (reports/simplification-inventory-2026-10-08.md)."
       ],
-      "nextGate": "Remove from normal navigation until calibration readiness and a named decision consumer both exist."
+      "nextGate": "Remove from normal navigation until calibration readiness and a named decision consumer both exist.",
+      "status": "RETIRED",
+      "retiredAt": "2026-10-08"
     },
     {
       "id": "nav:/price-accuracy",
@@ -209,15 +227,18 @@
       "label": "Watchlist News",
       "path": "/watchlist-news",
       "systemJob": "Review",
-      "disposition": "QUARANTINE",
+      "disposition": "RETIRE",
       "confidence": "MEDIUM",
       "risk": "EXTERNAL_ADVISORY",
       "operatorEvidence": "MISSING",
       "evidence": [
         "The page depends on analyst news-batch and sentiment-trend endpoints.",
-        "Its output is display-only and has no deterministic execution consumer."
+        "Its output is display-only and has no deterministic execution consumer.",
+        "Removed 2026-10-08 in the owner-approved simplification (reports/simplification-inventory-2026-10-08.md)."
       ],
-      "nextGate": "Keep only if it caused a distinct documented review action in the last 30 days."
+      "nextGate": "Keep only if it caused a distinct documented review action in the last 30 days.",
+      "status": "RETIRED",
+      "retiredAt": "2026-10-08"
     },
     {
       "id": "nav:/execution-quality",
@@ -225,15 +246,18 @@
       "label": "Execution Quality",
       "path": "/execution-quality",
       "systemJob": "Learn",
-      "disposition": "CONSOLIDATE",
+      "disposition": "RETIRE",
       "confidence": "HIGH",
       "risk": "READ_ONLY",
       "operatorEvidence": "MISSING",
       "evidence": [
         "Execution Quality and Execution Audit both consume /api/analytics/execution-audit.",
-        "ExecutionLog contains 186 rows."
+        "ExecutionLog contains 186 rows.",
+        "Removed 2026-10-08 in the owner-approved simplification (reports/simplification-inventory-2026-10-08.md)."
       ],
-      "nextGate": "Merge summary cards into Execution Audit and retain one navigation destination."
+      "nextGate": "Merge summary cards into Execution Audit and retain one navigation destination.",
+      "status": "RETIRED",
+      "retiredAt": "2026-10-08"
     },
     {
       "id": "nav:/execution-audit",
@@ -241,15 +265,18 @@
       "label": "Exec Audit",
       "path": "/execution-audit",
       "systemJob": "Learn",
-      "disposition": "KEEP",
+      "disposition": "RETIRE",
       "confidence": "HIGH",
       "risk": "READ_ONLY",
       "operatorEvidence": "MISSING",
       "evidence": [
         "The page is the detailed consumer of the shared execution-audit endpoint.",
-        "ExecutionLog contains 186 rows."
+        "ExecutionLog contains 186 rows.",
+        "Removed 2026-10-08 in the owner-approved simplification (reports/simplification-inventory-2026-10-08.md)."
       ],
-      "nextGate": "Use this as the canonical execution evidence destination."
+      "nextGate": "Use this as the canonical execution evidence destination.",
+      "status": "RETIRED",
+      "retiredAt": "2026-10-08"
     },
     {
       "id": "nav:/alerts",
@@ -336,15 +363,18 @@
       "label": "Signal Audit",
       "path": "/signal-audit",
       "systemJob": "Learn",
-      "disposition": "QUARANTINE",
+      "disposition": "RETIRE",
       "confidence": "HIGH",
       "risk": "ADVISORY_ANALYTICS",
       "operatorEvidence": "MISSING",
       "evidence": [
         "SignalAuditResult contains zero rows.",
-        "The page can trigger mutual-information analysis but has no recorded result."
+        "The page can trigger mutual-information analysis but has no recorded result.",
+        "Removed 2026-10-08 in the owner-approved simplification (reports/simplification-inventory-2026-10-08.md)."
       ],
-      "nextGate": "Hide until a named signal-pruning experiment has a sample requirement and review date."
+      "nextGate": "Hide until a named signal-pruning experiment has a sample requirement and review date.",
+      "status": "RETIRED",
+      "retiredAt": "2026-10-08"
     },
     {
       "id": "nav:/causal-audit",
@@ -352,15 +382,18 @@
       "label": "Causal Audit",
       "path": "/causal-audit",
       "systemJob": "Learn",
-      "disposition": "QUARANTINE",
+      "disposition": "RETIRE",
       "confidence": "HIGH",
       "risk": "ADVISORY_ANALYTICS",
       "operatorEvidence": "MISSING",
       "evidence": [
         "InvarianceAuditResult contains zero rows.",
-        "The page can trigger IRM analysis but has no recorded result."
+        "The page can trigger IRM analysis but has no recorded result.",
+        "Removed 2026-10-08 in the owner-approved simplification (reports/simplification-inventory-2026-10-08.md)."
       ],
-      "nextGate": "Hide until a named invariance experiment has enough environments, samples, and a review date."
+      "nextGate": "Hide until a named invariance experiment has enough environments, samples, and a review date.",
+      "status": "RETIRED",
+      "retiredAt": "2026-10-08"
     },
     {
       "id": "nav:/trade-log",

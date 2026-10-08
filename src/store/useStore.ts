@@ -56,7 +56,6 @@ interface AppState {
   operatingMode: OperatingMode;
   equity: number;
   userId: string | null;
-  applyKellyMultiplier: boolean;
 
   // Market Data
   marketIndices: MarketIndex[];
@@ -96,7 +95,6 @@ interface AppState {
   setOperatingMode: (mode: OperatingMode) => void;
   setEquity: (equity: number) => void;
   setUserId: (id: string) => void;
-  setApplyKellyMultiplier: (enabled: boolean) => void;
   setMarketIndices: (indices: MarketIndex[]) => void;
   setFearGreed: (data: FearGreedData) => void;
   setPositions: (positions: Position[]) => void;
@@ -139,7 +137,6 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   operatingMode: 'NORMAL',
   equity: 10000,
   userId: null,
-  applyKellyMultiplier: false,
 
   // Market Data
   marketIndices: [],
@@ -190,7 +187,6 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   setOperatingMode: (mode) => set({ operatingMode: mode }),
   setEquity: (equity) => set({ equity }),
   setUserId: (id) => set({ userId: id }),
-  setApplyKellyMultiplier: (enabled) => set({ applyKellyMultiplier: enabled }),
   setMarketIndices: (indices) => set({ marketIndices: indices }),
   setFearGreed: (data) => set({ fearGreed: data }),
   setPositions: (positions) => set({ positions }),
@@ -227,6 +223,5 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     riskProfile: state.riskProfile,
     operatingMode: state.operatingMode,
     equity: state.equity,
-    applyKellyMultiplier: state.applyKellyMultiplier,
   }),
 }));

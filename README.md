@@ -32,8 +32,8 @@ HybridTurtle helps turn discretionary trading into a repeatable workflow:
 
 - **7-stage scan engine** for candidate discovery and qualification
 - **Dual Score system** (BQS / FWS / NCS) for quantitative screening
-- **14-phase prediction engine** adding conformal intervals, failure mode scoring, dynamic signal weighting, adversarial stress testing, GNN graph analysis, Bayesian belief tracking, Meta-RL trade management, Kelly sizing, VPIN order flow, sentiment fusion, and causal invariance filtering
-- **TradePulse Dashboard** — unified confidence score (A+ to D grading) per ticker
+- **Failed-breakout auto-exit** — sells auto-trade entries whose breakout failed (passed the Aug–Sep 2026 holdout test)
+- **Advisory signal panels** (VPIN order flow, sentiment) and an optional model-assisted ranking overlay — display only, never change execution
 - **Cross-Reference engine** to reconcile scan and dual score recommendations
 - **Risk controls** (position sizing, open risk caps, concentration limits)
 - **Portfolio management** with stop updates and R-multiple tracking
@@ -178,7 +178,6 @@ The nightly automation can send alerts covering stop changes, laggard warnings, 
 │   ├── hooks/           # Custom React hooks
 │   ├── lib/             # Core business logic
 │   │   ├── modules/     # Modular engine plugins (19 active + 2 disabled modules)
-│   │   ├── prediction/  # 14-phase prediction engine (conformal, failure modes, GNN, etc.)
 │   │   └── signals/     # Additional signal layers (VPIN, sentiment)
 │   ├── store/           # Zustand state management
 │   └── types/           # Shared TypeScript types
@@ -211,7 +210,6 @@ All routes are under `/api`. Key endpoint groups:
 | `/api/trading212` | Trading 212 connect & sync |
 | `/api/backtest` | Signal replay & quality audit |
 | `/api/ev-stats` | Expected value statistics |
-| `/api/prediction/*` | Prediction engine (conformal, failure modes, stress test, GNN, beliefs, Kelly, trade-pulse, etc.) |
 | `/api/signals/*` | Signal runs, VPIN order flow, sentiment fusion |
 | `/api/workflow/tonight` | Tonight's workflow card data and run |
 | `/api/plans/:id` | Planned trade updates (PATCH) |

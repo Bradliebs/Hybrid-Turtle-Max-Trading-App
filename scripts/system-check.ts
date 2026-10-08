@@ -65,13 +65,13 @@ const STEPS: Step[] = [
   {
     name: 'Execution Safety',
     description: 'Testing pre-execution dry run, execution mode, operating mode, capital priority',
-    command: 'npx vitest run src/lib/pre-execution-dry-run.test.ts src/lib/execution-mode.test.ts src/lib/operating-mode.test.ts src/lib/capital-priority.test.ts src/lib/execution-quality.test.ts',
+    command: 'npx vitest run src/lib/pre-execution-dry-run.test.ts src/lib/execution-mode.test.ts src/lib/operating-mode.test.ts src/lib/capital-priority.test.ts',
     critical: true,
   },
   {
     name: 'Evidence & Analytics',
-    description: 'Testing EV tracker, filter scorecard, score validation, candidate outcomes',
-    command: 'npx vitest run src/lib/evidence-framework.test.ts src/lib/filter-scorecard.test.ts src/lib/score-validation.test.ts src/lib/candidate-outcome.test.ts src/lib/profit-scoreboard.test.ts',
+    description: 'Testing candidate outcomes and profit scoreboard',
+    command: 'npx vitest run src/lib/candidate-outcome.test.ts src/lib/profit-scoreboard.test.ts',
     critical: false,
   },
   {
