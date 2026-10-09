@@ -87,6 +87,67 @@ Trading ETFs with the same breakout rules would not have fixed this:
    read-only call to the broker: `scripts/repair-t212-tickers-from-instruments.ts`,
    a dry run by default.
 
+## Follow-up: owner approved the recommendations (same day)
+
+**D3 — instrument list refreshed, tickers repaired.**
+- One read-only call to Trading 212 fetched 18,481 instruments.
+- `scripts/repair-t212-tickers-from-instruments.ts` gained `--include-unknown`,
+  which also repairs well-formed tickers that don't exist at Trading 212. In
+  every mode, a US-priced stock now maps only to a `_US_EQ` line, and a
+  non-US-priced one never does.
+- 136 broker tickers were repaired, e.g. META → `FB_US_EQ`,
+  VTRS → `MYL_US_EQ`, TSCO.L → `TSCOl_EQ`.
+- 90 US stocks had no stored currency, so auto-trade had been skipping them.
+  Each now has Trading 212's currency for its line (USD).
+- 242 rows still have no match. 62 of them are active, mostly US-listed ETFs
+  that UK accounts can't buy.
+
+**D2 — ETF mappings.**
+- EQQQ.L → `EQQQl_EQ`; HMWO.L → `HMWOl_EQ` (currency GBX). Both lines trade in
+  pence.
+- IGLT.L and IIND.L are now mapped too. They trade in pounds, so the new
+  guard blocks them, as intended.
+- INRG and SGLN are **not** mapped. They are stored without `.L`, so
+  auto-trade's session filter would treat them as US stocks and try to buy
+  them after the London market closes. Fixing that is a sacred-file change
+  (`isStockForSession`), listed below.
+- ETF-only mode stays off.
+
+**Result.** Checked with the app's own guards (ticker exists, listing guard,
+UK units guard, currency, session), ISA-eligible instruments auto-trade can now
+buy:
+
+| Sleeve | Buyable | Still not |
+| --- | ---: | --- |
+| CORE | 449 | 54 unmapped, 2 listing mismatches (ASML, RIO ADR rows; correct blocks) |
+| HIGH_RISK | 359 | 2 tickers not at T212 |
+| ETF | 2 (EQQQ.L, HMWO.L) | 7 unmapped, 2 blocked GBP lines, 1 not at T212 |
+
+- **UK shares are now buyable by auto-trade for the first time**, in UK
+  sessions: BA, TSCO, ABF, WEIR, BP, HSX, PRU, RIO, SMT, INF, plus the two
+  ETFs. UK share purchases pay 0.5% stamp duty; the ETFs don't.
+- **To undo:** restore the `Stock.t212Ticker` and `currency` columns from
+  `prisma/backups/dev-pre-ticker-repair-2026-10-09.db`.
+
+**D1 — core and satellite (your action in Trading 212; nothing was traded).**
+1. Put long-term money in one buy-and-hold index ETF, for example VWRP
+   (all-world, accumulating) or VUAG (S&P 500). Hold it in an account
+   HybridTurtle is **not** connected to: the Trading 212 Invest account
+   (taxable), or a Stocks & Shares ISA at another provider. UK rules have
+   allowed paying into more than one S&S ISA in a tax year since April 2024
+   [unverified for your provider; check before opening].
+2. Don't give HybridTurtle that account's API key.
+3. Leave the connected ISA as the satellite. Auto-trade sizes from that
+   account's equity only.
+
+**D4 — not done.** With the core outside the connected account, the app
+doesn't need to ignore core holdings.
+
+**Still open (owner decision):** `isStockForSession` and the UK checks key off
+a `.L` suffix. London ETFs stored without it (CNDX, INRG, SGLN, SSLN, VUSA)
+would be routed to US sessions. Use the Yahoo listing (`toYahooTicker`)
+instead, then map them.
+
 ## Method and limits
 
 - **Real trades:** the `Position` table.

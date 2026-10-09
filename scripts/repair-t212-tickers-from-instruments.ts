@@ -29,6 +29,13 @@
  *   npx tsx scripts/repair-t212-tickers-from-instruments.ts
  *   npx tsx scripts/repair-t212-tickers-from-instruments.ts --refresh-cache
  *   npx tsx scripts/repair-t212-tickers-from-instruments.ts --apply
+ *   npx tsx scripts/repair-t212-tickers-from-instruments.ts --include-unknown
+ *
+ * `--include-unknown` also repairs well-formed tickers that are absent from
+ * the snapshot (e.g. RTX_US_EQ where T212 still lists UTX_US_EQ). In every
+ * mode a stock priced from a US listing may only map to a `_US_EQ`
+ * instrument and a non-US one never does, matching the buy-time
+ * listing guard (src/lib/listing-identity.ts).
  *
  * Environment
  * ───────────
@@ -52,11 +59,14 @@ import {
   writeT212InstrumentsCache,
   type T212InstrumentsLookup,
 } from '../src/lib/t212-instruments-cache';
+import { isUsBrokerListing, isUsPriceListing } from '../src/lib/listing-identity';
+import { toYahooTicker } from '../src/lib/ticker-maps';
 
 const prisma = new PrismaClient();
 
 const APPLY = process.argv.includes('--apply');
 const REFRESH = process.argv.includes('--refresh-cache');
+const INCLUDE_UNKNOWN = process.argv.includes('--include-unknown');
 const USER_ID = process.env.SANITY_USER_ID || 'default-user';
 
 interface InvalidRow {
@@ -123,6 +133,7 @@ function recommendFor(
     row.ticker,
   );
   const lookupKeys = [row.ticker, stripped].map((k) => k.toUpperCase());
+  const priceUs = isUsPriceListing(toYahooTicker(row.ticker));
 
   const fromShortName: T212Instrument[] = [];
   for (const key of lookupKeys) {
@@ -140,6 +151,8 @@ function recommendFor(
     for (const inst of list) {
       if (seen.has(inst.ticker)) continue;
       seen.add(inst.ticker);
+      // Same market as the price listing, or auto-trade would refuse it anyway.
+      if (isUsBrokerListing(inst.ticker) !== priceUs) continue;
       candidates.push(inst);
     }
   }
@@ -293,7 +306,8 @@ async function main() {
   });
 
   const invalid: InvalidRow[] = allWithT212
-    .filter((s) => isInvalidT212TickerFormat(s.t212Ticker))
+    .filter((s) => isInvalidT212TickerFormat(s.t212Ticker)
+      || (INCLUDE_UNKNOWN && !lookup.byT212Ticker.has(s.t212Ticker as string)))
     .map((s) => ({
       id: s.id,
       ticker: s.ticker,
@@ -302,7 +316,7 @@ async function main() {
       region: s.region,
     }));
 
-  console.log(`\nStock rows with INVALID-shaped t212Ticker: ${invalid.length}`);
+  console.log(`\nStock rows with ${INCLUDE_UNKNOWN ? 'invalid or unknown' : 'INVALID-shaped'} t212Ticker: ${invalid.length}`);
   if (invalid.length === 0) {
     console.log('Nothing to repair.');
     await prisma.$disconnect();
@@ -314,7 +328,7 @@ async function main() {
   console.log('\n--- Recommendations ---');
   for (const rec of recommendations) {
     if (rec.replacement) {
-      console.log(`  ${rec.row.ticker.padEnd(12)} '${rec.row.t212Ticker}' → '${rec.replacement}'  (${rec.reason})`);
+      console.log(`  ${rec.row.ticker.padEnd(12)} '${rec.row.t212Ticker}' → '${rec.replacement}'  [${lookup.byT212Ticker.get(rec.replacement)?.name ?? '?'}]  (${rec.reason})`);
     } else {
       console.log(`  ${rec.row.ticker.padEnd(12)} '${rec.row.t212Ticker}' → ??           (${rec.reason})`);
     }

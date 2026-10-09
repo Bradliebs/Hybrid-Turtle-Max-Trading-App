@@ -1528,3 +1528,19 @@ Found and handled:
   - the snapshot is re-read on every call;
   - owner decisions D1–D4 in
     [the report](../reports/etf-only-assessment-2026-10-09.md).
+
+### Owner approved D1–D4 (same day)
+- **Instrument list:** refreshed from Trading 212 (one read-only call, 18,481
+  instruments).
+- **Repair script:** gained `--include-unknown`, plus a rule that each
+  stock's broker line must be in the same market (US/non-US) as its price
+  listing.
+- **Data fixes:** 136 broker tickers repaired; 90 US currencies filled from
+  the broker list. EQQQ.L and HMWO.L mapped to their pence-quoted lines.
+  Database backed up first (`prisma/backups/dev-pre-ticker-repair-2026-10-09.db`).
+- **Buyable now:** 449 CORE, 359 HIGH_RISK and 2 ETFs. UK shares are buyable
+  by auto-trade for the first time.
+- **INRG and SGLN left unmapped:** bare London tickers would be routed to US
+  sessions. Needs a sacred-file change to `isStockForSession`.
+- **D1:** steps for the owner in the report; nothing traded.
+- **D4:** not needed.
