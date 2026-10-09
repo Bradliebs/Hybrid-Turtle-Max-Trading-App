@@ -20,7 +20,7 @@
  *
  * Used by:
  *  - scripts/repair-t212-tickers-from-instruments.ts (writes + reads)
- *  - src/cron/auto-trade.ts (reads only — soft-validates pre-flight)
+ *  - src/cron/auto-trade.ts, src/app/api/positions/execute/route.ts (getT212LineCurrency: UK line units)
  */
 
 import * as fs from 'node:fs';
@@ -158,4 +158,14 @@ export function isKnownT212Ticker(
 ): boolean | null {
   if (!lookup) return null;
   return lookup.byT212Ticker.has(t212Ticker);
+}
+
+/**
+ * Currency of a T212 instrument from the on-disk snapshot, or null when the
+ * snapshot or instrument is missing. Age is ignored: an instrument's trading
+ * currency does not change, and a missing answer blocks UK buys (fail closed).
+ */
+export function getT212LineCurrency(t212Ticker: string, cachePath: string = DEFAULT_CACHE_PATH): string | null {
+  const lookup = loadT212InstrumentsCache(cachePath, Number.POSITIVE_INFINITY);
+  return lookup?.byT212Ticker.get(t212Ticker)?.currencyCode ?? null;
 }

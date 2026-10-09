@@ -29,6 +29,8 @@
 import prisma from '@/lib/prisma';
 import { runHealthCheck } from '@/lib/health-check';
 import { generateStopRecommendations, generateTrailingStopRecommendations, updateStopLoss } from '@/lib/stop-manager';
+import { ukLineUnitsIssue } from '@/lib/listing-identity';
+import { getT212LineCurrency } from '@/lib/t212-instruments-cache';
 import { decideStopCommit } from '@/lib/nightly-stop-apply';
 import { sendNightlySummary } from '@/lib/telegram';
 import { deliverNightlyNotification } from './nightly-notification';
@@ -1525,6 +1527,13 @@ async function runNightlyProcess() {
             const t212Ticker = pos.t212Ticker || pos.stock.t212Ticker;
             if (!t212Ticker) {
               console.warn(`  [6-auto] ${pa.ticker}: no T212 ticker — skipping`);
+              pyramidsFailed++;
+              continue;
+            }
+            const isUkAdd = pa.ticker.endsWith('.L') || /^[A-Z]{2,5}l$/.test(pa.ticker);
+            const ukUnits = ukLineUnitsIssue(isUkAdd, t212Ticker, isUkAdd ? getT212LineCurrency(t212Ticker) : null);
+            if (ukUnits) {
+              console.warn(`  [6-auto] ${pa.ticker}: ${ukUnits}`);
               pyramidsFailed++;
               continue;
             }

@@ -29,3 +29,15 @@ export function brokerListingMismatch(priceSymbol: string, brokerTicker: string)
   if (priceUs === brokerUs) return null;
   return `Listing mismatch: prices come from ${priceSymbol} (${priceUs ? 'US' : 'non-US'}) but the broker instrument is ${brokerTicker} (${brokerUs ? 'US' : 'non-US'}). Sizing and stop prices would be in the wrong units; fix the stock's T212 mapping before trading it.`;
 }
+
+/**
+ * Auto-trade and the manual execute route size UK (.L) instruments and place
+ * their stops in pence. Some London lines trade in pounds or dollars at T212
+ * (e.g. VUAGl_EQ GBP, CNDXl_EQ USD), where that would mean a ~100x size and a
+ * stop in the wrong units. Block unless the broker line is known to be GBX.
+ */
+export function ukLineUnitsIssue(isUk: boolean, brokerTicker: string, brokerCurrency: string | null | undefined): string | null {
+  if (!isUk) return null;
+  if (brokerCurrency === 'GBX' || brokerCurrency === 'GBp') return null;
+  return `UK listing ${brokerTicker} trades in ${brokerCurrency || 'an unknown currency'} at T212, but UK prices and stops are handled in pence only. Refusing to size it (refresh the T212 instruments cache or fix the listing first).`;
+}

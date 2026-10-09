@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { brokerListingMismatch, isUsBrokerListing, isUsPriceListing } from './listing-identity';
+import { brokerListingMismatch, isUsBrokerListing, isUsPriceListing, ukLineUnitsIssue } from './listing-identity';
 import { toYahooTicker } from './ticker-maps';
 import { categorizeSkipReason } from './skip-reason-category';
 
@@ -33,5 +33,23 @@ describe('listing identity guard', () => {
 
   it('groups the skip under broker mapping in Telegram summaries', () => {
     expect(categorizeSkipReason(brokerListingMismatch('RIO.L', 'RIO_US_EQ')!)).toBe('BROKER_MAPPING');
+  });
+});
+
+describe('UK line units guard', () => {
+  it('allows UK lines that T212 quotes in pence', () => {
+    expect(ukLineUnitsIssue(true, 'EQQQl_EQ', 'GBX')).toBeNull();
+    expect(ukLineUnitsIssue(true, 'EQQQl_EQ', 'GBp')).toBeNull();
+  });
+
+  it('blocks UK lines quoted in pounds or dollars, and unknown currencies', () => {
+    expect(ukLineUnitsIssue(true, 'VUAGl_EQ', 'GBP')).toContain('trades in GBP');
+    expect(ukLineUnitsIssue(true, 'CNDXl_EQ', 'USD')).toContain('trades in USD');
+    expect(ukLineUnitsIssue(true, 'IGLT_UK_EQ', null)).toContain('unknown currency');
+  });
+
+  it('never blocks non-UK instruments', () => {
+    expect(ukLineUnitsIssue(false, 'AAPL_US_EQ', 'USD')).toBeNull();
+    expect(ukLineUnitsIssue(false, 'AAPL_US_EQ', null)).toBeNull();
   });
 });

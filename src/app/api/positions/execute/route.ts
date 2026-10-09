@@ -33,7 +33,8 @@ import {
 } from '@/lib/execution-intent';
 import { reconcileExecutionIntent } from '@/lib/execution-reconciliation';
 import { calculatePositionSize } from '@/lib/position-sizer';
-import { brokerListingMismatch } from '@/lib/listing-identity';
+import { brokerListingMismatch, ukLineUnitsIssue } from '@/lib/listing-identity';
+import { getT212LineCurrency } from '@/lib/t212-instruments-cache';
 import { toYahooTicker } from '@/lib/ticker-maps';
 import { RISK_PROFILES, type RiskProfileType, type Sleeve } from '@/types';
 
@@ -206,6 +207,12 @@ async function validateSafetyAssertions(
   const listingMismatch = brokerListingMismatch(toYahooTicker(stock.ticker), stock.t212Ticker);
   if (listingMismatch) {
     return { ok: false, error: `ABORT: ${listingMismatch}` };
+  }
+  // Sizing below handles every UK instrument in pence; block lines T212 quotes in GBP or USD.
+  const isUkInstrument = stock.ticker.endsWith('.L') || /^[A-Z]{2,5}l$/.test(stock.ticker);
+  const ukUnits = ukLineUnitsIssue(isUkInstrument, stock.t212Ticker, isUkInstrument ? getT212LineCurrency(stock.t212Ticker) : null);
+  if (ukUnits) {
+    return { ok: false, error: `ABORT: ${ukUnits}` };
   }
 
   // 4. ISA eligibility check — abort if explicitly ineligible

@@ -1498,3 +1498,33 @@ recommendation" (S1–S4 in
   - `/api/scan` returns 404 when the cache is stale (by design);
   - the midday sync reports "PRTS: closure accounting pending -
     MULTIPLE_SELL_ORDERS" on each run.
+
+## 2026-10-09 Would ETF-only trading be better? (review loop with Claude Sonnet 5.5)
+
+Answer: no, not by moving the breakout system to ETFs. Buy-and-hold index ETFs
+beat the account by 16–17 points from 17 May to 8 Oct (VUAG +7.2%, VWRL +6.3%;
+account time-weighted −9.7%).
+
+- **Breakout evidence:** ETF breakouts were not better than stock breakouts,
+  but with 21 signals on 9 dates the result is inconclusive.
+- **Recommendation:** core and satellite, with the core held outside the
+  connected account. The sync adopts every ISA holding, and nightly trails
+  stops on all open positions. CNDX was stopped out this way.
+
+Found and handled:
+- **ETF-only mode would buy nothing.** The 4 "buyable" ETFs map to broker
+  tickers Trading 212 doesn't have, and the 8 other ISA-eligible ETFs aren't
+  mapped. No UK instrument (0 of 50) has a valid broker ticker.
+- **Likely invalid broker tickers:** about 190 of 1,002 are absent from the
+  T212 instrument list (legacy codes, e.g. META = FB_US_EQ). VTRS was rejected
+  with a 404 on 28 Sep.
+- **Fixed:** every buy path (auto-trade, manual execute, nightly pyramid adds)
+  treated UK prices as pence. London ETFs quoted in GBP or USD (VUAG, CNDX)
+  would have been ordered at about 100× size. New
+  `ukLineUnitsIssue` / `getT212LineCurrency` block any UK line not quoted in
+  GBX; missing data blocks too (fail closed). No change today.
+- **Follow-ups:**
+  - valuation of held GBP/USD London lines;
+  - the snapshot is re-read on every call;
+  - owner decisions D1–D4 in
+    [the report](../reports/etf-only-assessment-2026-10-09.md).

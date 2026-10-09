@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { T212Instrument } from './trading212';
 import {
+  getT212LineCurrency,
   indexInstruments,
   isKnownT212Ticker,
   loadT212InstrumentsCache,
@@ -128,6 +129,16 @@ describe('loadT212InstrumentsCache + writeT212InstrumentsCache', () => {
     expect(loaded?.count).toBe(2);
     expect(loaded?.byT212Ticker.has('AAPL_US_EQ')).toBe(true);
     expect(loaded?.byT212Ticker.has('GOOGL_US_EQ')).toBe(true);
+  });
+
+  it('getT212LineCurrency reads the line currency even from an old snapshot', () => {
+    writeT212InstrumentsCache([makeInstrument({ ticker: 'VUAGl_EQ', currencyCode: 'GBP' })], cachePath);
+    const raw = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    raw.fetchedAt = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString();
+    fs.writeFileSync(cachePath, JSON.stringify(raw), 'utf8');
+    expect(getT212LineCurrency('VUAGl_EQ', cachePath)).toBe('GBP');
+    expect(getT212LineCurrency('GHOSTl_EQ', cachePath)).toBeNull();
+    expect(getT212LineCurrency('VUAGl_EQ', path.join(tmpDir, 'missing.json'))).toBeNull();
   });
 
   it('returns null when the cache file is missing', () => {

@@ -32,6 +32,15 @@ Each entry uses this shape (newest at top of the History section):
 
 ## History
 
+### 2026-10-09 - pending - auto-trade.ts: block UK lines that T212 does not quote in pence
+
+- File(s): `src/cron/auto-trade.ts` (one guard before FX sizing; two imports). Same guard in `src/app/api/positions/execute/route.ts` and before nightly pyramid add orders in `src/cron/nightly.ts`. New pure `ukLineUnitsIssue` in `src/lib/listing-identity.ts` and `getT212LineCurrency` in `src/lib/t212-instruments-cache.ts`.
+- Why: both buy paths size every UK (.L) instrument and place its stop in pence (`fxToGbp = 0.01`). Several London ETFs trade in pounds or dollars at T212 (VUAGl_EQ, VUSAl_EQ, VWRLl_EQ, IGLTl_EQ GBP; CNDXl_EQ, CMODl_EQ USD) and Yahoo quotes them the same way (VUAG.L 113.84). If any of them were mapped, the order would be about 100x too large and the stop in the wrong units. The DB currency cannot be trusted for this (VUAG.L is stored as GBX). Found in the ETF-only review (`reports/etf-only-assessment-2026-10-09.md`).
+- Behaviour: a UK candidate is skipped (auto-trade), aborted (manual execute) or its pyramid add skipped (nightly) unless the T212 instrument snapshot (`prisma/cache/t212-instruments.json`, any age) lists its line currency as GBX. A missing snapshot or instrument blocks (fail closed).
+- Behaviour preserved: no change today. None of the 50 active UK instruments has a broker ticker that exists at T212 (16 mapped, all to codes T212 does not use, e.g. `_UK_EQ`), so no UK buy could reach the broker before or after this change, and no UK position is open. Pyramid adds on held UK lines quoted in pence (GBX) are still allowed. US and other non-UK candidates are untouched. Sizing, stops, gates and ranking unchanged.
+- Tests: `listing-identity.test.ts` (GBX/GBp allowed; GBP, USD and unknown blocked; non-UK never blocked), `t212-instruments-cache.test.ts` (currency read from an old snapshot; missing file/instrument returns null). auto-trade and execute-route suites pass.
+- Author: Copilot CLI agent
+
 ### 2026-10-08 - pending - auto-trade.ts: news-fetcher import path only (simplification)
 
 - File(s): `src/cron/auto-trade.ts` (two dynamic imports changed from `@/lib/analyst/news-fetcher` to `@/lib/news-fetcher`). The module was moved unchanged (`git mv`) when the AI analyst was removed; `src/cron/nightly.ts` lost the advisory prediction Steps 7b–7f and their imports.

@@ -75,7 +75,8 @@ import { groupSkipsByCategory } from '@/lib/skip-reason-category';
 import { acquireAutoTradeLock, releaseAutoTradeLock, AutoTradeLockContentionError, type LockHolder } from '@/lib/auto-trade-lock';
 import { getHistoricalFill, recoverTimedOutBuy } from '@/lib/buy-timeout-recovery';
 import { readJevGateConfig, partitionEtfOnly, partitionJevVerdicts, jevLogPhase, type JevVerdict } from '@/lib/auto-trade-filters';
-import { brokerListingMismatch, isUsPriceListing } from '@/lib/listing-identity';
+import { brokerListingMismatch, isUsPriceListing, ukLineUnitsIssue } from '@/lib/listing-identity';
+import { getT212LineCurrency } from '@/lib/t212-instruments-cache';
 import { exitAutoEnabled, runFailedBreakoutExits, terminalAttempts } from '@/lib/failed-breakout-exit';
 import { toYahooTicker } from '@/lib/ticker-maps';
 
@@ -1796,6 +1797,11 @@ async function runAutoTrade(session: Session) {
 
     // FX conversion for sizing
     const isUk = candidate.ticker.endsWith('.L');
+    const ukUnits = ukLineUnitsIssue(isUk, stock.t212Ticker, isUk ? getT212LineCurrency(stock.t212Ticker) : null);
+    if (ukUnits) {
+      skipped.push({ ticker: candidate.ticker, reason: ukUnits });
+      continue;
+    }
     const rawCurrency = stock.currency ? stock.currency.trim() : '';
     // Audit fix F7 (2026-): refuse to silently default a missing currency to
     // USD for non-.L tickers. A non-GBP candidate sized at the wrong FX is
