@@ -1544,3 +1544,17 @@ Found and handled:
   sessions. Needs a sacred-file change to `isStockForSession`.
 - **D1:** steps for the owner in the report; nothing traded.
 - **D4:** not needed.
+
+### Untradable instruments removed from the active universe (same day)
+- **The 242 rows with non-existent broker codes:** none had a correct
+  Trading 212 match. They are US ETFs UK retail investors can't buy,
+  leveraged/inverse products, partnerships and preference shares, and
+  micro-caps T212 doesn't list.
+- **Fix:** the 62 active ones were deactivated, and all 242 invalid codes were
+  cleared. Undo file:
+  `prisma/backups/untradable-instruments-undo-2026-10-09.json`.
+- **Active universe:** CORE 627, HIGH_RISK 378, ETF 18.
+- **Buyable in the ISA:** 529 CORE, 369 HIGH_RISK, 2 ETFs.
+- **Still open:** 82 active instruments are unmapped; 37 are not ISA-tagged.
+- The Watchdog auto-restart was also re-enabled (stale failure budget from 24
+  June cleared, owner approved).

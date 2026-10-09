@@ -148,6 +148,40 @@ a `.L` suffix. London ETFs stored without it (CNDX, INRG, SGLN, SSLN, VUSA)
 would be routed to US sessions. Use the Yahoo listing (`toYahooTicker`)
 instead, then map them.
 
+## Follow-up: the 242 instruments with no broker match (same day, owner approved)
+
+None of them could be remapped. Trading 212 doesn't offer them to this
+account, and the look-alikes are different products. For example,
+`SPXSl_EQ` is an Invesco S&P 500 tracker, not the 3× short SPXS, and
+`GRIDl_EQ` is an energy-storage fund.
+
+| Group | Examples |
+| --- | --- |
+| US-listed ETFs (not sold to UK retail investors) | SPY, QQQ, IWM, XL* sectors, GLD, TLT, SMH, SOXX, VNQ |
+| Leveraged / inverse / volatility | SH, SPXS, SQQQ, VXX |
+| Stocks or funds Trading 212 doesn't carry | BEP, MPLX (partnerships), HOVNP, WVVIP, TCBIO (preference shares), micro-caps, WPRT (Canadian line only) |
+| Odd code | LFUS (Littelfuse) is `LFUS_EQ_US`; the listing guard treats it as non-US |
+
+**Fix:**
+- The 62 active instruments were deactivated, so they're no longer scanned
+  or suggested.
+- All 242 non-existent broker codes were cleared, leaving 0 invalid codes in
+  the database.
+- No open position was affected.
+- SPY stays a benchmark: the regime and benchmark code fetch its prices
+  directly, not through the Stock row.
+- Active universe now: CORE 627, HIGH_RISK 378, ETF 18.
+- Buyable in the ISA, checked with the app's own guards: 529 CORE, 369
+  HIGH_RISK, 2 ETFs.
+- **To undo:** `prisma/backups/untradable-instruments-undo-2026-10-09.json`
+  holds every old value.
+
+**Still open:**
+- 82 active instruments have no broker code (68 CORE; 14 ETFs, including VUSA,
+  VUAG and CNDX).
+- 37 have a valid code but aren't tagged ISA-eligible.
+- Both are mapping and tagging tasks for a separate decision.
+
 ## Method and limits
 
 - **Real trades:** the `Position` table.
