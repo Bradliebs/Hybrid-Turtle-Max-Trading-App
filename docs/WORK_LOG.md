@@ -1558,3 +1558,21 @@ Found and handled:
 - **Still open:** 82 active instruments are unmapped; 37 are not ISA-tagged.
 - The Watchdog auto-restart was also re-enabled (stale failure budget from 24
   June cleared, owner approved).
+
+## 2026-10-14 Could Needle (cactus-compute/needle) help auto-trading? (review with Claude Sonnet 5.5)
+
+Answer: no, not for buy or sell decisions.
+- **What Needle is:** a small on-device model for tool calling, text
+  extraction, embeddings and speech. It does nothing for numeric or
+  time-series prediction.
+- **The only language-model step on the trading path is Jev,** and it hasn't
+  changed a trade: 20 allows, 0 vetoes. Only 32 of its 70 ledger reviews
+  reached the model.
+- **Jev's check is close to circular:** a claim the app wrote from its own
+  scan data, checked against that same data. Its one MIXED verdict (ACVA)
+  became SUPPORTED on the next scan, 30 minutes later.
+- **The only natural fit is plain-English Telegram commands.** That improves
+  no trade, and Needle's own docs say the base model can invent argument
+  values, which is a risk on a live account.
+- **No code changes.** [Report](../reports/needle-assessment-2026-10-14.md).
+  The Jev keep-or-remove decision in late October remains the relevant lever.
