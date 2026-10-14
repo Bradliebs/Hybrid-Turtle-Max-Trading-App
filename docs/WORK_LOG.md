@@ -1576,3 +1576,32 @@ Answer: no, not for buy or sell decisions.
   values, which is a risk on a live account.
 - **No code changes.** [Report](../reports/needle-assessment-2026-10-14.md).
   The Jev keep-or-remove decision in late October remains the relevant lever.
+
+## 2026-10-14 How to turn HybridTurtle into a money-making machine (review with Claude Sonnet 5.5)
+
+- **Scale & expectancy math (`M1`):** At `£219.51` ISA equity (`SMALL_ACCOUNT`
+  20% `CORE` notional cap → ~£44 position → `1R` ≈ £2.20 on a 5% stop), even a
+  +0.25R to +0.30R edge over 80 trades/yr earns £44–£53/yr before FX. Across 37
+  closed positions (`E[R] = -0.20R`, −£45.84; 22 auto-trades at 18.2% win rate,
+  `E[R] = -0.38R`, −£42.14; estimated 0.15%/side USD FX drag ~£15.82 = 35% of
+  loss), the buy signal is unproven while passive zero-FX UK index ETFs (`VUAG`
+  +7.2%, `VWRL` +6.3%) beat the account's −8.76% TWR (17 May – 13 Oct) by 15–16
+  points. The £219 ISA is a live testbed to prove positive R-expectancy before
+  scaling capital.
+- **What is working:** Failed-breakout auto-exit (`FAILX`, live since 8 Oct)
+  has already executed 2 live exits (`NTAP` at −0.45R / −£1.03 on 9 Oct; `LCUT`
+  at −0.25R / −£0.56 on 13 Oct), cutting both losses well before −1.0R. `PLTR`
+  stop is ratcheted above entry (+0.84R locked in).
+- **Fixed (`M3a`):** `TypesafeReviewSource.latest()` in
+  `src/lib/typesafe-review-source.ts` now filters for `stock.t212Ticker IS NOT
+  NULL AND stock.t212Ticker != '' AND stock.isaEligible = 1` (14 of 32 answered
+  Jev reviews in `ledger.json` had been spent on unmapped/non-ISA stocks like
+  `OCDO.L`, `SHEL`, `PSON.L`, `COLO-B.CO`).
+- **Fixed (`M3b`, dry-run):** `scripts/repair-t212-tickers-from-instruments.ts`
+  gained `--include-unmapped`, restricted `.L` currency matching to `GBX`/`GBp`
+  (rejecting GBP-line ETFs like `VUSA` and `VUAG.L`), and refused to auto-map
+  bare non-US tickers or EU/AU listings without a trading session. Dry-run
+  identifies 29 of 33 unmapped `.L` stocks ready to map.
+- **Owner decisions (`D1`–`D4`):** documented in
+  [the report](../reports/money-making-machine-plan-2026-10-14.md) and backed by
+  `scripts/research/money_machine_audit.py`.

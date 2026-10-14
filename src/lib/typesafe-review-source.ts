@@ -73,6 +73,8 @@ export class TypesafeReviewSource {
       const rows = this.database.prepare(`${CANDIDATE_SELECT}
         WHERE result.scanId = ? AND result.passesAllFilters = 1
           AND result.status IN ('READY', 'WATCH', 'WAIT_PULLBACK')
+          AND stock.t212Ticker IS NOT NULL AND stock.t212Ticker != ''
+          AND stock.isaEligible = 1
         ORDER BY result.rankScore DESC, stock.ticker ASC, result.id ASC LIMIT 5
       `).all(scan.id).map(row => rowSchema.parse(row));
       return toSnapshot(scan, rows);

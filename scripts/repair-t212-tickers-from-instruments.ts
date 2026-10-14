@@ -30,12 +30,15 @@
  *   npx tsx scripts/repair-t212-tickers-from-instruments.ts --refresh-cache
  *   npx tsx scripts/repair-t212-tickers-from-instruments.ts --apply
  *   npx tsx scripts/repair-t212-tickers-from-instruments.ts --include-unknown
+ *   npx tsx scripts/repair-t212-tickers-from-instruments.ts --include-unmapped
  *
  * `--include-unknown` also repairs well-formed tickers that are absent from
- * the snapshot (e.g. RTX_US_EQ where T212 still lists UTX_US_EQ). In every
- * mode a stock priced from a US listing may only map to a `_US_EQ`
+ * the snapshot (e.g. RTX_US_EQ where T212 still lists UTX_US_EQ).
+ * `--include-unmapped` also inspects active Stock rows with `t212Ticker = null`.
+ * In every mode a stock priced from a US listing may only map to a `_US_EQ`
  * instrument and a non-US one never does, matching the buy-time
- * listing guard (src/lib/listing-identity.ts).
+ * listing guard (src/lib/listing-identity.ts); and a `.L` listing may only
+ * map to a pence-quoted (`GBX`/`GBp`) line, matching `ukLineUnitsIssue`.
  *
  * Environment
  * ───────────
@@ -67,12 +70,13 @@ const prisma = new PrismaClient();
 const APPLY = process.argv.includes('--apply');
 const REFRESH = process.argv.includes('--refresh-cache');
 const INCLUDE_UNKNOWN = process.argv.includes('--include-unknown');
+const INCLUDE_UNMAPPED = process.argv.includes('--include-unmapped');
 const USER_ID = process.env.SANITY_USER_ID || 'default-user';
 
 interface InvalidRow {
   id: string;
   ticker: string;
-  t212Ticker: string;
+  t212Ticker: string | null;
   currency: string | null;
   region: string | null;
 }
@@ -99,21 +103,24 @@ interface Recommendation {
 /** Currency codes the instrument's listing currencyCode could be reported as
  *  for a Stock with a given declared currency or exchange suffix. */
 function expectedCurrencyCodes(row: InvalidRow): Set<string> | null {
-  // Suffix-based hints win because they are the strongest declaration.
-  if (row.ticker.endsWith('.L')) return new Set(['GBX', 'GBP', 'GBp']);
-  if (row.ticker.endsWith('.DE')) return new Set(['EUR']);
-  if (row.ticker.endsWith('.PA')) return new Set(['EUR']);
-  if (row.ticker.endsWith('.MI')) return new Set(['EUR']);
-  if (row.ticker.endsWith('.MC')) return new Set(['EUR']);
-  if (row.ticker.endsWith('.AS')) return new Set(['EUR']);
-  if (row.ticker.endsWith('.CO')) return new Set(['DKK']);
-  if (row.ticker.endsWith('.ST')) return new Set(['SEK']);
-  if (row.ticker.endsWith('.HE')) return new Set(['EUR']);
-  if (row.ticker.endsWith('.SW')) return new Set(['CHF']);
+  const yahoo = toYahooTicker(row.ticker);
+  // Suffix-based hints on the price listing win because they are the strongest declaration.
+  // .L listings are sized and stopped in pence (ukLineUnitsIssue blocks GBP/USD lines).
+  if (yahoo.endsWith('.L')) return new Set(['GBX', 'GBp']);
+  if (yahoo.endsWith('.DE')) return new Set(['EUR']);
+  if (yahoo.endsWith('.PA')) return new Set(['EUR']);
+  if (yahoo.endsWith('.MI')) return new Set(['EUR']);
+  if (yahoo.endsWith('.MC')) return new Set(['EUR']);
+  if (yahoo.endsWith('.AS')) return new Set(['EUR']);
+  if (yahoo.endsWith('.CO')) return new Set(['DKK']);
+  if (yahoo.endsWith('.ST')) return new Set(['SEK']);
+  if (yahoo.endsWith('.HE')) return new Set(['EUR']);
+  if (yahoo.endsWith('.SW')) return new Set(['CHF']);
   // Currency-only signals — only useful when the Stock row carries one.
   if (!row.currency) return null;
   const c = row.currency.toUpperCase();
-  if (c === 'GBP' || c === 'GBX' || c === 'GBP.') return new Set(['GBX', 'GBP', 'GBp']);
+  if (c === 'GBX' || c === 'GBP.') return new Set(['GBX', 'GBp']);
+  if (c === 'GBP') return new Set(['GBP']);
   if (c === 'USD') return new Set(['USD']);
   return new Set([c]);
 }
@@ -133,7 +140,29 @@ function recommendFor(
     row.ticker,
   );
   const lookupKeys = [row.ticker, stripped].map((k) => k.toUpperCase());
-  const priceUs = isUsPriceListing(toYahooTicker(row.ticker));
+  const yahoo = toYahooTicker(row.ticker);
+  const priceUs = isUsPriceListing(yahoo);
+
+  // An unmapped row whose DB ticker is bare (e.g. SHEL, SAP) but whose price
+  // listing is non-US (SHEL.L, SAP.DE) would be misrouted into US sessions by
+  // isStockForSession(ticker), so refuse to auto-map it until its ticker is
+  // normalised or session routing uses toYahooTicker.
+  if (!row.t212Ticker && isUsPriceListing(row.ticker) !== priceUs) {
+    return {
+      row,
+      replacement: null,
+      reason: `DB ticker '${row.ticker}' is bare but priced from '${yahoo}' — mapping without normalising the ticker would misroute it into US sessions`,
+    };
+  }
+
+  // Non-UK non-US listings (.DE, .PA, .AS, .SW, etc.) have no trading session.
+  if (!row.t212Ticker && !priceUs && !yahoo.endsWith('.L')) {
+    return {
+      row,
+      replacement: null,
+      reason: `Non-US, non-UK listing '${yahoo}' has no auto-trade session`,
+    };
+  }
 
   const fromShortName: T212Instrument[] = [];
   for (const key of lookupKeys) {
@@ -295,7 +324,9 @@ async function main() {
   const lookup = await getLookup();
 
   const allWithT212 = await prisma.stock.findMany({
-    where: { t212Ticker: { not: null } },
+    where: INCLUDE_UNMAPPED
+      ? { OR: [{ t212Ticker: { not: null } }, { active: true, t212Ticker: null }] }
+      : { t212Ticker: { not: null } },
     select: {
       id: true,
       ticker: true,
@@ -307,16 +338,22 @@ async function main() {
 
   const invalid: InvalidRow[] = allWithT212
     .filter((s) => isInvalidT212TickerFormat(s.t212Ticker)
-      || (INCLUDE_UNKNOWN && !lookup.byT212Ticker.has(s.t212Ticker as string)))
+      || (INCLUDE_UNKNOWN && s.t212Ticker != null && !lookup.byT212Ticker.has(s.t212Ticker))
+      || (INCLUDE_UNMAPPED && (s.t212Ticker == null || s.t212Ticker === '')))
     .map((s) => ({
       id: s.id,
       ticker: s.ticker,
-      t212Ticker: s.t212Ticker as string,
+      t212Ticker: s.t212Ticker,
       currency: s.currency,
       region: s.region,
     }));
 
-  console.log(`\nStock rows with ${INCLUDE_UNKNOWN ? 'invalid or unknown' : 'INVALID-shaped'} t212Ticker: ${invalid.length}`);
+  const label = [
+    'INVALID-shaped',
+    ...(INCLUDE_UNKNOWN ? ['unknown'] : []),
+    ...(INCLUDE_UNMAPPED ? ['unmapped active'] : []),
+  ].join(' / ');
+  console.log(`\nStock rows with ${label} t212Ticker: ${invalid.length}`);
   if (invalid.length === 0) {
     console.log('Nothing to repair.');
     await prisma.$disconnect();
