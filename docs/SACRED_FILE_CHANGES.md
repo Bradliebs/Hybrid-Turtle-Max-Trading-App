@@ -32,6 +32,16 @@ Each entry uses this shape (newest at top of the History section):
 
 ## History
 
+### 2026-10-14 - pending - scan-engine.ts, auto-trade.ts, types/index.ts: session universe filter (O1) and SMALL_ACCOUNT 1.0% riskPerTrade (O2)
+
+- File(s): `src/lib/scan-engine.ts` (`runFullScan` optional `universeFilter` parameter), `src/cron/auto-trade.ts` (passes `isStockForSession` predicate into `runFullScan` for non-`scan` sessions), `src/types/index.ts` (`RISK_PROFILES.SMALL_ACCOUNT.riskPerTrade`: `2.0` → `1.0`), `src/lib/allocation-score.ts` (`targetRiskPct.SMALL_ACCOUNT`: `2.0` → `1.0`), `src/lib/position-sizer.test.ts` (updated `SMALL_ACCOUNT` expectations + new `O2` volatility-parity test).
+- Why: Owner approved `O1` and `O2` (`reports/efficiency-and-benchmark-comparison-2026-10-14.md`).
+  - `O1`: Previously, `runFullScan()` fetched and computed technicals for all 926 active stocks on every session, then `auto-trade.ts` discarded all non-session stocks at Step 2 (`isStockForSession`). Filtering inside `runFullScan` for trading sessions (`uk`, `uk-mid`, `us`, `us-mid`, `us-close`) cuts UK session scans from 926 stocks (~12 min) to 41 `.L` stocks (~30 sec) without changing which candidates are eligible for that session.
+  - `O2`: With a 20% `CORE` notional cap on `SMALL_ACCOUNT`, any stock with a stop tighter than 10% was cap-bound at 20% of equity, so `riskPerTrade = 2.0%` only took effect on wide-stop (10%+) stocks—causing volatile stocks to risk 2–3× as many pounds as normal (5% stop) stocks. Setting `riskPerTrade = 1.0%` aligns the risk target with the 20% cap (`1.0% / 20% = 5%` stop) so all stops >= 5% risk the same `1.0%` of equity (~£2.20 on £220).
+- Behaviour preserved: The 20:00 `scan` session and the dashboard `/api/scan` route omit `universeFilter` and continue to scan and persist all 926 active stocks. Candidate grading, technical filters, risk gates (max 4 positions, 10% max open risk, 20% CORE cap), stop placement, and `FAILX` exits are unchanged.
+- Tests: `src/lib/position-sizer.test.ts` (including new `O2` test verifying equal £2.20 risk across 5% and 10% stops on £220 equity), `src/cron/auto-trade.test.ts`, and full test suite (155 files, 2,111 passed).
+- Author: Copilot CLI agent
+
 ### 2026-10-09 - pending - auto-trade.ts: block UK lines that T212 does not quote in pence
 
 - File(s): `src/cron/auto-trade.ts` (one guard before FX sizing; two imports). Same guard in `src/app/api/positions/execute/route.ts` and before nightly pyramid add orders in `src/cron/nightly.ts`. New pure `ukLineUnitsIssue` in `src/lib/listing-identity.ts` and `getT212LineCurrency` in `src/lib/t212-instruments-cache.ts`.

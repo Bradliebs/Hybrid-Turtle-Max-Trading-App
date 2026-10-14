@@ -1656,3 +1656,14 @@ Answer: no, not for buy or sell decisions.
   once per 30s) even when the in-memory map already has entries, and
   `/api/system-status` allows up to 90 minutes (`5400s`) to match the hourly
   background cron cadence.
+
+### Owner approved O1 & O2 (same day)
+- **O1 (`src/lib/scan-engine.ts`, `src/cron/auto-trade.ts`):** Added optional
+  `universeFilter` to `runFullScan`; trading sessions filter by
+  `isStockForSession` before fetching Yahoo bars (cutting UK session scans from
+  926 stocks to 41 `.L` stocks), while the 20:00 `scan` session and `/api/scan`
+  still scan all 926 stocks.
+- **O2 (`src/types/index.ts`, `src/lib/allocation-score.ts`):** Lowered
+  `SMALL_ACCOUNT` `riskPerTrade` from `2.0%` to `1.0%` to align with the 20%
+  `CORE` notional cap and equalise pound risk across 5%–10%+ stop distances.
+- Logged in `docs/SACRED_FILE_CHANGES.md`.

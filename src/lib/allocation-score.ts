@@ -225,7 +225,7 @@ export function calcCorrelationPenalty(correlatedCount: number): number {
  * meaningful risk.
  *
  * riskToCapitalRatio = suggestedRiskGbp / suggestedCostGbp
- * Profile target ratio ≈ riskPerTrade% (2% for SMALL_ACCOUNT)
+ * Profile target ratio ≈ riskPerTrade% (1% for SMALL_ACCOUNT)
  * If actual ratio < target * 0.5 → penalty scales up.
  */
 export function calcCapitalInefficiency(
@@ -255,8 +255,8 @@ export function scoreAndRankCandidates(
 ): AllocationScoreBreakdown[] {
   const caps = getProfileCaps(context.riskProfile);
   const targetRiskPct = {
-    CONSERVATIVE: 0.75, BALANCED: 0.95, SMALL_ACCOUNT: 2.0, AGGRESSIVE: 3.0,
-  }[context.riskProfile] ?? 2.0;
+    CONSERVATIVE: 0.75, BALANCED: 0.95, SMALL_ACCOUNT: 1.0, AGGRESSIVE: 3.0,
+  }[context.riskProfile] ?? 1.0;
 
   // Pre-compute portfolio exposure
   const sleeveExposure = new Map<string, number>();

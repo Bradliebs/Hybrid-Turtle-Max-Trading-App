@@ -38,7 +38,7 @@ export const RISK_PROFILES: Record<RiskProfileType, RiskProfileConfig> = {
   },
   SMALL_ACCOUNT: {
     name: 'Small Account',
-    riskPerTrade: 2.0,
+    riskPerTrade: 1.0,
     maxPositions: 4,
     maxOpenRisk: 10.0,
     description: 'Higher risk per trade for smaller account growth',

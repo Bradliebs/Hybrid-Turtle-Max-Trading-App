@@ -1361,7 +1361,13 @@ async function runAutoTrade(session: Session) {
   console.log('\n  [1/4] Running signal scan...');
   let scanResult: Awaited<ReturnType<typeof runFullScan>>;
   try {
-    scanResult = await runFullScan(userId, riskProfile, equity);
+    // O1 (2026-10-14): trading sessions filter the universe to stocks eligible
+    // for that session (e.g. UK sessions scan only the 41 .L stocks instead of
+    // all 926), while the 20:00 'scan' session scans the full universe.
+    const sessionUniverseFilter = session === 'scan'
+      ? undefined
+      : (stock: { ticker: string; sleeve: string }) => isStockForSession(stock.ticker, stock.sleeve, session);
+    scanResult = await runFullScan(userId, riskProfile, equity, undefined, undefined, 0, 'FULL', sessionUniverseFilter);
   } catch (err) {
     const msg = (err as Error).message;
     console.error(`  ✗ Scan failed: ${msg}`);

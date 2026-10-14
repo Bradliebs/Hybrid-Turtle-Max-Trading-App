@@ -66,31 +66,31 @@ describe('position-sizer formulas', () => {
       equity: 1_000,
       riskProfile: 'SMALL_ACCOUNT',
       entryPrice: 500,
-      stopPrice: 490,
+      stopPrice: 495,
       allowFractional: true,
     });
-    // Small account, 2% risk = £20 budget, risk per share = £10 → 2.0 shares
+    // Small account, 1% risk = £10 budget, risk per share = £5 → 2.0 shares
     expect(result.shares).toBe(2);
     // For a case where fractional matters:
     const frac = calculatePositionSize({
       equity: 1_000,
       riskProfile: 'SMALL_ACCOUNT',
-      entryPrice: 300,
-      stopPrice: 293,
+      entryPrice: 100,
+      stopPrice: 93,
       allowFractional: true,
     });
-    // 2% × 1000 = 20 risk budget, risk per share = 7 → 20/7 = 2.857 → floor to 2.85
-    expect(frac.shares).toBe(2.85);
+    // 1% × 1000 = 10 risk budget, risk per share = 7 → 10/7 = 1.4285 → floor to 1.42
+    expect(frac.shares).toBe(1.42);
   });
 
   it('floors to whole shares in non-fractional mode (default)', () => {
     const result = calculatePositionSize({
       equity: 1_000,
       riskProfile: 'SMALL_ACCOUNT',
-      entryPrice: 300,
-      stopPrice: 293,
+      entryPrice: 100,
+      stopPrice: 95,
     });
-    // 20/7 = 2.857 → floor to 2
+    // 1% × 1000 = 10 risk budget, risk per share = 5 → 10/5 = 2 (cost £200 <= £200 cap)
     expect(result.shares).toBe(2);
   });
 
@@ -219,6 +219,29 @@ describe('position-sizer formulas', () => {
       expect(Number.isFinite(result.riskPercent)).toBe(true);
     });
   }
+
+  it('O2: SMALL_ACCOUNT 1.0% riskPerTrade equalises pound risk across 5% and 10% stop distances', () => {
+    const stop5Pct = calculatePositionSize({
+      equity: 220,
+      riskProfile: 'SMALL_ACCOUNT',
+      entryPrice: 100,
+      stopPrice: 95,
+      sleeve: 'CORE',
+      allowFractional: true,
+    });
+    const stop10Pct = calculatePositionSize({
+      equity: 220,
+      riskProfile: 'SMALL_ACCOUNT',
+      entryPrice: 100,
+      stopPrice: 90,
+      sleeve: 'CORE',
+      allowFractional: true,
+    });
+    // Both risk 1.0% of £220 = £2.20 (5% stop takes £44 = 20% cap; 10% stop takes £22 = 10% of equity).
+    expect(stop5Pct.riskDollars).toBeCloseTo(2.2, 2);
+    expect(stop10Pct.riskDollars).toBeCloseTo(2.2, 2);
+    expect(stop10Pct.totalCost).toBeLessThan(stop5Pct.totalCost);
+  });
 });
 
 describe('position-sizer utility functions', () => {

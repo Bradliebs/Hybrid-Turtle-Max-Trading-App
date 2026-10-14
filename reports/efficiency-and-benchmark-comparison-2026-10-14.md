@@ -51,3 +51,22 @@ Comparing HybridTurtle against institutional and proven systematic trend-followi
 | **O1** | **Filter `runFullScan` universe by session market** (pass an optional ticker/sleeve predicate into `runFullScan` so `uk` / `uk-mid` only scan the **41 active `.L` stocks** instead of all **926 stocks**) | `src/lib/scan-engine.ts` (**sacred**), `src/cron/auto-trade.ts` (**sacred**) | Cuts `uk` and `uk-mid` runtime and Yahoo Finance API calls by **95%** (from 926 stocks / ~12 min to 41 stocks / ~30 sec) once you return to `NORMAL` mode. *(While in `CAPITAL_PRESERVATION`, daytime sessions already exit at Gate 3a before scanning.)* |
 | **O2** | **Align `SMALL_ACCOUNT` `riskPerTrade` (2.0% → 1.0%) with the 20% notional cap** | `src/types/index.ts`, `src/lib/position-sizer.ts` (**sacred**) | Equalises risk per trade at ~1.0% of equity across both moderate-volatility (5% stop) and high-volatility (10% stop) stocks, preventing wide-stop stocks from taking 3× the pound risk of normal stocks. |
 | **O3** | **Keep `E1` (`LATE` / `CHAND`) and `S4` (`CORE` simple rule) running in shadow mode** | None (`scripts/research/prospective_shadow_tests.py` already active) | Evaluates whether delaying the trailing stop until $+1.0R$ (`LATE`) and replacing `BQS`/`FWS`/`NCS` with the 4-rule `CORE` filter improve out-of-sample expectancy before any live change. |
+
+---
+
+## 4. Update (Same Day): Owner Approved O1 & O2
+
+Both sacred-file enhancements have been implemented, tested, and logged in
+`docs/SACRED_FILE_CHANGES.md`:
+
+- **O1 — Session universe filter in `runFullScan` (`src/lib/scan-engine.ts`,
+  `src/cron/auto-trade.ts`):** `runFullScan` now accepts an optional
+  `universeFilter` predicate. For trading sessions (`uk`, `uk-mid`, `us`,
+  `us-mid`, `us-close`), `auto-trade.ts` passes `isStockForSession`, so `uk` /
+  `uk-mid` scan only the **41 active `.L` stocks** (~30 seconds) instead of all
+  **926 stocks** (~12 minutes). The 20:00 `scan` session and `/api/scan`
+  continue to scan the full 926-stock universe.
+- **O2 — `SMALL_ACCOUNT` `riskPerTrade` aligned from `2.0%` to `1.0%`
+  (`src/types/index.ts`, `src/lib/allocation-score.ts`,
+  `src/lib/position-sizer.test.ts`):** Equalises pound risk at `1.0%` of equity
+  (~£2.20 on £220) across both 5%-stop and 10%-stop stocks.

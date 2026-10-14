@@ -152,7 +152,8 @@ export async function runFullScan(
   gapGuardConfig: GapGuardConfig = DEFAULT_GAP_GUARD_CONFIG,
   onProgress?: (stage: string, processed: number, total: number) => void,
   slippageBuffer = 0,
-  scanMode: ScanMode = 'FULL'
+  scanMode: ScanMode = 'FULL',
+  universeFilter?: (stock: { ticker: string; sleeve: Sleeve }) => boolean
 ): Promise<{
   regime: MarketRegime;
   candidates: ScanCandidate[];
@@ -166,7 +167,8 @@ export async function runFullScan(
   scanMode: ScanMode;
 }> {
   const isCoreLite = scanMode === 'CORE_LITE';
-  const universe = await getUniverse();
+  const rawUniverse = await getUniverse();
+  const universe = universeFilter ? rawUniverse.filter(universeFilter) : rawUniverse;
   const candidates: ScanCandidate[] = [];
 
   onProgress?.('Stage 1: Loading universe', 0, universe.length);
