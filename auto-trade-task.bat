@@ -30,6 +30,15 @@ cd /d "%~dp0"
 set SESSION=%~1
 if "%SESSION%"=="" set SESSION=scan
 
+:: Owner decision D4 (2026-10-14): pause the 20:30 UK (us-close) buying session
+:: (11 of 12 historical auto-trades at us-close lost money, -0.57R mean, -£27.93).
+:: Set PAUSE_US_CLOSE=0 in the environment to re-enable.
+if /I "%SESSION%"=="us-close" if not "%PAUSE_US_CLOSE%"=="0" (
+    echo [%date% %time%] Skipping us-close session ^(paused per D4^) >> auto-trade.log
+    echo  [%date% %time%] Skipping us-close session ^(paused per D4^).
+    exit /b 0
+)
+
 echo.
 echo  ===========================================================
 echo   HybridTurtle — Auto-Trade [%SESSION%]

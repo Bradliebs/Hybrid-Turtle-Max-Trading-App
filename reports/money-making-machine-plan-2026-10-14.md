@@ -147,6 +147,44 @@ higher-quality entries while the forward tests run.
 | **D3** | **Clean the 122 non-buyable / misrouted active Stock rows:** deactivate the 31 EU/AU rows (no session) and 3 duplicate bare UK rows (`RIO`, `REL`, `SHEL`), and normalise or deactivate the remaining 18 bare UK rows | Stops `SHEL` and EU stocks from polluting US sessions, rankings, and candidate slots | **Yes — pure hygiene** |
 | **D4** | **Pause the 20:30 UK (`us-close`) buying session** (`HybridTurtle-Trade-USC`) | Removes the session responsible for 11 of 12 losses (−£27.93, −0.57R mean); entries happen only at 14:45 and 17:00 UK | **Optional — low-risk way to cut trade frequency and FX churn** |
 
+## 5. Update (Same Day): Owner Approved D1–D4
+
+All four recommendations have been applied (full DB backup saved first at
+`prisma/backups/dev-pre-d1-d4-2026-10-14.db`):
+
+1. **D1 — `CAPITAL_PRESERVATION` active:** `User.operatingMode` is now
+   `CAPITAL_PRESERVATION` (`/api/dashboard/today-directive` confirms: *"Capital
+   Preservation mode — no new trades. Managing 4 existing positions. Stops and
+   exits only."*). Auto-trade Step 0 (`FAILX` failed-breakout exits), nightly
+   stop ratcheting, midday sync, and the 20:00 evening scan continue to run so
+   the forward tests (`prospective_shadow_tests.py` restart check, `E1`, `S4`)
+   keep accumulating evidence without risking new capital.
+   - *Your manual action outside the app:* Hold long-term capital in a zero-FX
+     GBP index ETF (`VUAG` or `VWRP`) in an account HybridTurtle is **not**
+     connected to.
+2. **D2 — 29 FTSE `.L` pence-quoted stocks mapped:** Ran
+   `npx tsx scripts/repair-t212-tickers-from-instruments.ts --include-unmapped --apply`,
+   mapping 29 FTSE 100/250 stocks (`OCDO.L` → `OCDOl_EQ`, `PSON.L` → `PSONl_EQ`,
+   `LLOY.L` → `LLOYl_EQ`, `RR.L` → `RRl_EQ`, `GLEN.L` → `GLENl_EQ`, `BATS.L` →
+   `BATSl_EQ`, `LGEN.L`, `LSEG.L`, `EXPN.L`, `IMB.L`, `III.L`, `BBOX.L`,
+   `LAND.L`, `SGRO.L`, `BLND.L`, `NXT.L`, `SBRY.L`, `WISE.L`, `JET2.L`,
+   `HIK.L`, `MNDI.L`, `ITV.L`, `MKS.L`, `AUTO.L`, `DPLM.L`, `WPP.L`, `REL.L`,
+   `SHEL.L`, `AAL.L`).
+3. **D3 — 93 non-buyable / misrouted active `Stock` rows deactivated:** Every
+   remaining active row that could not execute cleanly in the ISA (31 EU/AU rows
+   with no session, 21 bare UK rows including duplicates `RIO`/`REL`/`SHEL` that
+   routed into US sessions, 34 non-ISA-tagged US rows, 6 non-GBX UK ETFs, 1
+   unmapped US ETF) was set to `active = 0` (undo file saved at
+   `prisma/backups/d3-universe-hygiene-undo-2026-10-14.json`).
+   `python scripts/research/money_machine_audit.py` now confirms **926 active
+   rows (`CORE` 556, `HIGH_RISK` 368, `ETF` 2) and 926 buyable (100% clean, 0
+   misrouted or unbuyable)**.
+4. **D4 — 20:30 UK (`us-close`) buying session paused:** `auto-trade-task.bat`
+   now exits 0 immediately when called with `us-close` (unless
+   `PAUSE_US_CLOSE=0` is set in the environment), keeping the Windows Scheduled
+   Task manifest intact while pausing the session where 11 of 12 historical
+   auto-trades lost money.
+
 ## Reproduce
 
 ```powershell

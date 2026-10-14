@@ -1605,3 +1605,20 @@ Answer: no, not for buy or sell decisions.
 - **Owner decisions (`D1`–`D4`):** documented in
   [the report](../reports/money-making-machine-plan-2026-10-14.md) and backed by
   `scripts/research/money_machine_audit.py`.
+
+### Owner approved D1–D4 (same day)
+- **Backup:** `prisma/backups/dev-pre-d1-d4-2026-10-14.db` and
+  `prisma/backups/d3-universe-hygiene-undo-2026-10-14.json`.
+- **D1 (`CAPITAL_PRESERVATION`):** `User.operatingMode` set to
+  `CAPITAL_PRESERVATION`. New auto-buys are paused; Step 0 failed-breakout
+  auto-exits, nightly stop ratcheting, midday sync, and evening scans keep
+  running so the forward tests continue to collect evidence.
+- **D2 (29 FTSE `.L` stocks mapped):** Applied `--include-unmapped --apply`,
+  mapping 29 pence-quoted FTSE stocks (`OCDO.L`, `PSON.L`, `LLOY.L`, `RR.L`,
+  `GLEN.L`, `BATS.L`, `SHEL.L`, `REL.L`, etc.).
+- **D3 (93 non-buyable / misrouted rows deactivated):** Deactivated the 31
+  EU/AU rows, 21 bare UK rows (including `SHEL`, `RIO`, `REL`), 34 non-ISA US
+  rows, and 7 non-GBX/unmapped ETFs. Active universe is now **926 rows (`CORE`
+  556, `HIGH_RISK` 368, `ETF` 2), 100% buyable (0 misrouted)**.
+- **D4 (`us-close` paused):** `auto-trade-task.bat` skips `us-close` (`exit /b
+  0`) unless `PAUSE_US_CLOSE=0`.
