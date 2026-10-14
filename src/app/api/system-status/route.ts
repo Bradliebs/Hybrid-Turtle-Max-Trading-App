@@ -14,7 +14,7 @@ import prisma from '@/lib/prisma';
 import { apiError } from '@/lib/api-response';
 import { ensureDefaultUser } from '@/lib/default-user';
 import { OPERATING_MODES, type OperatingMode } from '@/types';
-import { getT212ApiStats } from '@/lib/position-sync';
+import { getT212ApiStats, rehydrateT212PriceCache } from '@/lib/position-sync';
 
 type SystemReadiness = 'READY' | 'WARNING' | 'BLOCKED';
 
@@ -48,6 +48,7 @@ export async function GET() {
     ]);
 
     const now = Date.now();
+    await rehydrateT212PriceCache();
     const heartbeatAgeH = latestHeartbeat
       ? (now - latestHeartbeat.timestamp.getTime()) / 3600000
       : 999;
@@ -69,10 +70,13 @@ export async function GET() {
       { id: 'broker_sync', label: 'T212 Sync', ok: t212SyncAgeH != null && t212SyncAgeH < 24, value: t212SyncAgeH != null ? `${t212SyncAgeH.toFixed(0)}h ago` : 'Never' },
       { id: 'health_age', label: 'Health Check Age', ok: healthAge < 36, value: `${healthAge.toFixed(0)}h ago` },
       // T212 prices are required only when there are open positions to value.
+      // Scheduled syncs/hourly-status write prisma/cache/t212-prices.json every
+      // hour during market hours (~3600s), so allow up to 5400s (90m) before
+      // raising a warning when the browser is not actively polling /api/positions.
       (() => {
         const t212Stats = getT212ApiStats();
         const cacheOk = openPositionCount === 0
-          || (t212Stats.cacheSize > 0 && t212Stats.cacheAge < 300);
+          || (t212Stats.cacheSize > 0 && t212Stats.cacheAge < 5400);
         return {
           id: 't212_prices',
           label: 'T212 Prices',

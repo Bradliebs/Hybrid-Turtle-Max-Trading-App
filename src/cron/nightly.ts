@@ -1059,8 +1059,9 @@ async function runNightlyProcess() {
     // and snapshots used whatever value was last written by the dashboard
     // sync — which could be stale by days. Failure is non-fatal.
     try {
-      const { refreshUserEquityFromBroker } = await import('@/lib/equity-refresh');
-      const eq = await refreshUserEquityFromBroker(userId);
+      const eq = positionSyncResult.equityRefreshed
+        ? { ...positionSyncResult.equityRefreshed, written: true }
+        : await (await import('@/lib/equity-refresh')).refreshUserEquityFromBroker(userId);
       if (eq.written) {
         console.log(`        Equity refreshed from broker: £${eq.combinedTotalValueGbp.toFixed(2)}`);
       } else {

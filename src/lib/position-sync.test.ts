@@ -381,17 +381,22 @@ describe('syncClosedPositions order-history usage', () => {
     expect(mocks.positionUpdate).not.toHaveBeenCalled();
   });
 
-  it('records the sync time only for accounts whose holdings were read', async () => {
+  it('records the sync time and refreshes equity from the already-fetched account summary', async () => {
     mocks.positionFindMany.mockResolvedValue([makeDbPosition('VOD')]);
     mocks.getPositions.mockResolvedValue([makePosition('VOD', 72.4)]);
 
     const { syncClosedPositions } = await import('./position-sync');
-    await syncClosedPositions('default-user', { detectUntrackedSales: false });
+    const result = await syncClosedPositions('default-user', { detectUntrackedSales: false });
 
     expect(mocks.userUpdate).toHaveBeenCalledTimes(1);
     expect(mocks.userUpdate).toHaveBeenCalledWith({
       where: { id: 'default-user' },
-      data: { t212LastSync: new Date(2026, 3, 30, 10, 0, 0) },
+      data: { t212LastSync: new Date(2026, 3, 30, 10, 0, 0), equity: 6000 },
+    });
+    expect(result.equityRefreshed).toEqual({
+      combinedTotalValueGbp: 6000,
+      investTotalValue: 6000,
+      isaTotalValue: null,
     });
   });
 

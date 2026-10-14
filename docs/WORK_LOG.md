@@ -1622,3 +1622,37 @@ Answer: no, not for buy or sell decisions.
   556, `HIGH_RISK` 368, `ETF` 2), 100% buyable (0 misrouted)**.
 - **D4 (`us-close` paused):** `auto-trade-task.bat` skips `us-close` (`exit /b
   0`) unless `PAUSE_US_CLOSE=0`.
+
+## 2026-10-14 Efficiency audit & comparison with systematic trend-following systems (review with Claude Sonnet 5.5)
+
+- **Comparison with successful automated systems:** Documented in
+  [reports/efficiency-and-benchmark-comparison-2026-10-14.md](../reports/efficiency-and-benchmark-comparison-2026-10-14.md)
+  across six dimensions: (1) decoupling daily indicator computation from
+  intraday execution (`O1` optional sacred-file proposal to filter `runFullScan`
+  by session market so UK sessions scan 41 `.L` stocks instead of 926), (2)
+  resting stop-limit entry orders vs market-on-poll, (3) cross-sectional
+  relative-strength ranking vs overfitted composite scores (`S4` forward test),
+  (4) volatility-parity sizing vs the 20% notional cap (`O2`), (5) asymmetric
+  exits (`FAILX` live + `LATE`/`CHAND` in `E1` forward test), and (6) keeping
+  cost-to-risk under 2% of `1R`.
+- **Fixed (`E1` — `src/lib/health-check.ts`):** `checkPositionSizes` (`C3`),
+  `checkClusterConcentration` (`G2`), and `checkSectorConcentration` (`G3`)
+  previously divided by invested-only `totalValue` (and `G2`/`G3` used raw
+  un-normalised entry prices), guaranteeing a false `YELLOW` health check on any
+  4-position `SMALL_ACCOUNT` book ($1/4 = 25\% > 20\%$ cap). They now use
+  mark-to-market GBP prices over `Math.max(equity, nonHedgeInvested)`, matching
+  `risk-gates.ts` and `G1`.
+- **Fixed (`E2` — `src/lib/position-sync.ts`, `src/cron/midday-sync.ts`,
+  `src/cron/nightly.ts`):** `syncClosedPositions()` already fetched
+  `getAccountSummary()` via `dualClient.fetchBothAccounts()`, and `midday-sync`
+  immediately called `refreshUserEquityFromBroker()`, hitting `GET
+  /equity/account/summary` twice within 1 second and tripping an HTTP 429
+  rate-limit retry on every run. `syncClosedPositions()` now persists
+  `User.equity` from the already-fetched summary when all configured accounts
+  succeeded, and `midday-sync`/`nightly` reuse `result.equityRefreshed`.
+- **Fixed (`E3` — `src/lib/position-sync.ts`,
+  `src/app/api/system-status/route.ts`):** `rehydrateT212PriceCache()` now
+  merges newer on-disk prices from `prisma/cache/t212-prices.json` (throttled to
+  once per 30s) even when the in-memory map already has entries, and
+  `/api/system-status` allows up to 90 minutes (`5400s`) to match the hourly
+  background cron cadence.

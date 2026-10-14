@@ -102,11 +102,14 @@ async function runMiddaySync() {
     console.log(`  Result: ${result.checked} checked, ${result.closed} closed, ${result.skipped} skipped, ${result.updated} updated`);
 
     // Audit fix F4 (2026-): refresh User.equity from T212 combined totalValue.
-    // Without this, sizing and hourly/nightly reporting drift from broker
-    // reality between dashboard syncs. Failure is non-fatal — helper leaves
-    // existing equity untouched on T212 / decrypt failure.
+    // syncClosedPositions already fetches the account summary and persists
+    // User.equity when all configured accounts succeed; only call
+    // refreshUserEquityFromBroker as a fallback so we don't hit
+    // GET /equity/account/summary twice in 1 second and trip a 429.
     try {
-      const eq = await refreshUserEquityFromBroker(userId);
+      const eq = result.equityRefreshed
+        ? { ...result.equityRefreshed, written: true }
+        : await refreshUserEquityFromBroker(userId);
       if (eq.written) {
         console.log(`  Equity refreshed: £${eq.combinedTotalValueGbp.toFixed(2)} (invest=${eq.investTotalValue ?? 'n/a'}, isa=${eq.isaTotalValue ?? 'n/a'})`);
       } else {

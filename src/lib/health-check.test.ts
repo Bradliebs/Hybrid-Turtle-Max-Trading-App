@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { checkStopIntegrity, checkConfigCoherence, checkSleeveLimits, checkOpenPositionUniqueness, tallyInvalidT212TickerRows, tallyInvalidYahooTickerRows } from './health-check';
+import {
+  checkStopIntegrity,
+  checkConfigCoherence,
+  checkSleeveLimits,
+  checkPositionSizes,
+  checkClusterConcentration,
+  checkSectorConcentration,
+  checkOpenPositionUniqueness,
+  tallyInvalidT212TickerRows,
+  tallyInvalidYahooTickerRows,
+} from './health-check';
 import type { RiskProfileType } from '@/types';
 
 // ── Helper: make a minimal position for health checks ──
@@ -377,5 +387,44 @@ describe('tallyInvalidYahooTickerRows', () => {
     expect(result.message).toContain('6 stock');
     expect(result.message).toContain('…');
     expect(result.message).not.toContain('A6→');
+  });
+});
+
+// ── C3 / G2 / G3: Denominator & GBP mark-to-market alignment with risk-gates ──
+
+describe('checkPositionSizes / checkClusterConcentration / checkSectorConcentration', () => {
+  it('C3 uses max(equity, nonHedgeInvested) so 4 positions at 20% of equity are GREEN under SMALL_ACCOUNT', () => {
+    const positions = [
+      makePos({ ticker: 'PLTR', shares: 1, entryPrice: 44 }),
+      makePos({ ticker: 'MRNA', shares: 1, entryPrice: 42 }),
+      makePos({ ticker: 'VEEV', shares: 1, entryPrice: 43 }),
+      makePos({ ticker: 'V', shares: 1, entryPrice: 43 }),
+    ];
+    // Total invested = £172 out of £220 equity; each position is <= 20% (£44) of £220.
+    const result = checkPositionSizes(positions, 220, 'SMALL_ACCOUNT');
+    expect(result.status).toBe('GREEN');
+    expect(result.id).toBe('C3');
+  });
+
+  it('C3 flags a position that genuinely exceeds the profile cap of equity', () => {
+    const positions = [
+      makePos({ ticker: 'BIG', shares: 1, entryPrice: 55 }),
+      makePos({ ticker: 'SMALL', shares: 1, entryPrice: 30 }),
+    ];
+    // £55 / £220 = 25% > 20% SMALL_ACCOUNT CORE cap.
+    const result = checkPositionSizes(positions, 220, 'SMALL_ACCOUNT');
+    expect(result.status).toBe('YELLOW');
+    expect(result.message).toContain('1 position');
+  });
+
+  it('G2 & G3 use GBP mark-to-market over max(equity, nonHedgeInvested)', () => {
+    const positions = [
+      makePos({ ticker: 'PLTR', shares: 1, entryPrice: 200, cluster: 'AI_Robotics', sector: 'Tech' }),
+      makePos({ ticker: 'MRNA', shares: 1, entryPrice: 200, cluster: 'Biotech', sector: 'Health' }),
+    ];
+    // In GBP: £44 each out of £220 equity = 20% each (within 25% cluster cap and 30% sector cap).
+    const gbp = { PLTR: 44, MRNA: 44 };
+    expect(checkClusterConcentration(positions, 220, 'SMALL_ACCOUNT', undefined, gbp).status).toBe('GREEN');
+    expect(checkSectorConcentration(positions, 220, 'SMALL_ACCOUNT', undefined, gbp).status).toBe('GREEN');
   });
 });

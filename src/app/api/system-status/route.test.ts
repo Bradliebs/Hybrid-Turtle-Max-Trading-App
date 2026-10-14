@@ -28,7 +28,10 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 vi.mock('@/lib/default-user', () => ({ ensureDefaultUser: vi.fn().mockResolvedValue('default-user') }));
-vi.mock('@/lib/position-sync', () => ({ getT212ApiStats: () => mocks.apiStats() }));
+vi.mock('@/lib/position-sync', () => ({
+  getT212ApiStats: () => mocks.apiStats(),
+  rehydrateT212PriceCache: vi.fn().mockResolvedValue(true),
+}));
 
 import { GET } from './route';
 

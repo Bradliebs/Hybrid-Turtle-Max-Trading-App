@@ -118,10 +118,10 @@ export async function runHealthCheck(userId: string): Promise<HealthCheckReport>
   results.push(checkSleeveLimits(user.positions, user.equity, livePrices, gbpPrices));
 
   // ---- G2: Cluster Concentration ----
-  results.push(checkClusterConcentration(user.positions, user.equity, user.riskProfile as RiskProfileType));
+  results.push(checkClusterConcentration(user.positions, user.equity, user.riskProfile as RiskProfileType, livePrices, gbpPrices));
 
   // ---- G3: Sector Concentration ----
-  results.push(checkSectorConcentration(user.positions, user.equity, user.riskProfile as RiskProfileType));
+  results.push(checkSectorConcentration(user.positions, user.equity, user.riskProfile as RiskProfileType, livePrices, gbpPrices));
 
   // ---- H1: Heartbeat Recent ----
   results.push(await checkHeartbeat());
@@ -511,7 +511,7 @@ function checkOpenRiskCap(
   return { id: 'C2', label: 'Open Risk Within Cap', category: 'Risk', status: 'GREEN', message: `Open risk: ${riskPercent.toFixed(1)}% / ${profile.maxOpenRisk}%` };
 }
 
-function checkPositionSizes(
+export function checkPositionSizes(
   positions: HealthCheckPosition[],
   equity: number,
   riskProfile: RiskProfileType,
@@ -526,17 +526,22 @@ function checkPositionSizes(
     return { id: 'C3', label: 'Valid Position Sizes', category: 'Risk', status: 'GREEN', message: 'Too few positions for size check' };
   }
   const caps = getProfileCaps(riskProfile);
-  // Use mark-to-market prices (GBP-normalised where available) rather than stale entry prices
-  const totalValue = positions.reduce((sum: number, p: HealthCheckPosition) => {
-    const ticker = p.stock?.ticker;
-    const markPrice = ticker ? (gbpPrices?.[ticker] ?? livePrices?.[ticker] ?? p.entryPrice) : p.entryPrice;
-    return sum + markPrice * p.shares;
-  }, 0);
+  // Same denominator as risk-gates Gate 6 and G1: max(equity, non-HEDGE invested).
+  // Dividing by invested-only sum without equity flags every 4-position book when
+  // the per-position cap is 20% (1/4 = 25% > 20%).
+  const nonHedgeInvested = positions
+    .filter((p) => (p.stock?.sleeve || 'CORE') !== 'HEDGE')
+    .reduce((sum: number, p: HealthCheckPosition) => {
+      const ticker = p.stock?.ticker;
+      const markPrice = ticker ? (gbpPrices?.[ticker] ?? livePrices?.[ticker] ?? p.entryPrice) : p.entryPrice;
+      return sum + markPrice * p.shares;
+    }, 0);
+  const denominator = Math.max(equity, nonHedgeInvested);
   const oversized = positions.filter((p: HealthCheckPosition) => {
     const ticker = p.stock?.ticker;
     const markPrice = ticker ? (gbpPrices?.[ticker] ?? livePrices?.[ticker] ?? p.entryPrice) : p.entryPrice;
     const posValue = markPrice * p.shares;
-    const pct = totalValue > 0 ? posValue / totalValue : 0;
+    const pct = denominator > 0 ? posValue / denominator : 0;
     const sleeve = p.stock?.sleeve || 'CORE';
     const cap = caps.positionSizeCaps[sleeve] ?? 0.16;
     return pct > cap;
@@ -663,23 +668,35 @@ export function checkSleeveLimits(
   return { id: 'G1', label: 'Sleeve Limits', category: 'Allocation', status: 'GREEN', message: 'Sleeve allocations within limits' };
 }
 
-function checkClusterConcentration(positions: HealthCheckPosition[], _equity: number, riskProfile: RiskProfileType): HealthCheckResult {
+export function checkClusterConcentration(
+  positions: HealthCheckPosition[],
+  equity: number,
+  riskProfile: RiskProfileType,
+  livePrices?: Record<string, number>,
+  gbpPrices?: Record<string, number>
+): HealthCheckResult {
   if (positions.length === 0) {
     return { id: 'G2', label: 'Cluster Concentration', category: 'Allocation', status: 'GREEN', message: 'No open positions' };
   }
 
-  const totalValue = positions.reduce((sum, p) => sum + (p.entryPrice * p.shares), 0);
-  if (totalValue <= 0) {
+  // Same basis as risk-gates Gate 4 and G1: mark-to-market GBP value over max(equity, non-HEDGE invested).
+  const clusterValues: Record<string, number> = {};
+  let nonHedgeInvested = 0;
+  for (const p of positions) {
+    const ticker = p.stock?.ticker;
+    const markPrice = ticker ? (gbpPrices?.[ticker] ?? livePrices?.[ticker] ?? p.entryPrice) : p.entryPrice;
+    const value = markPrice * p.shares;
+    const sleeve = p.stock?.sleeve || 'CORE';
+    if (sleeve !== 'HEDGE') nonHedgeInvested += value;
+    const cluster = p.stock?.cluster || 'General';
+    clusterValues[cluster] = (clusterValues[cluster] || 0) + value;
+  }
+  const denominator = Math.max(equity, nonHedgeInvested);
+  if (denominator <= 0) {
     return { id: 'G2', label: 'Cluster Concentration', category: 'Allocation', status: 'GREEN', message: 'No portfolio value' };
   }
 
   const caps = getProfileCaps(riskProfile);
-  // Group by actual cluster name from stock relation
-  const clusterValues: Record<string, number> = {};
-  for (const p of positions) {
-    const cluster = p.stock?.cluster || 'General';
-    clusterValues[cluster] = (clusterValues[cluster] || 0) + (p.entryPrice * p.shares);
-  }
 
   // With fewer than 2 distinct clusters, concentration is expected
   if (Object.keys(clusterValues).length < 2) {
@@ -688,7 +705,7 @@ function checkClusterConcentration(positions: HealthCheckPosition[], _equity: nu
 
   const breaches: string[] = [];
   for (const [cluster, value] of Object.entries(clusterValues)) {
-    const pct = value / totalValue;
+    const pct = value / denominator;
     if (pct > caps.clusterCap) {
       breaches.push(`${cluster}: ${(pct * 100).toFixed(0)}% > ${(caps.clusterCap * 100).toFixed(0)}%`);
     }
@@ -700,23 +717,35 @@ function checkClusterConcentration(positions: HealthCheckPosition[], _equity: nu
   return { id: 'G2', label: 'Cluster Concentration', category: 'Allocation', status: 'GREEN', message: `Cluster concentrations within ${(caps.clusterCap * 100).toFixed(0)}% cap` };
 }
 
-function checkSectorConcentration(positions: HealthCheckPosition[], _equity: number, riskProfile: RiskProfileType): HealthCheckResult {
+export function checkSectorConcentration(
+  positions: HealthCheckPosition[],
+  equity: number,
+  riskProfile: RiskProfileType,
+  livePrices?: Record<string, number>,
+  gbpPrices?: Record<string, number>
+): HealthCheckResult {
   if (positions.length === 0) {
     return { id: 'G3', label: 'Sector Concentration', category: 'Allocation', status: 'GREEN', message: 'No open positions' };
   }
 
-  const totalValue = positions.reduce((sum, p) => sum + (p.entryPrice * p.shares), 0);
-  if (totalValue <= 0) {
+  // Same basis as risk-gates Gate 5 and G1: mark-to-market GBP value over max(equity, non-HEDGE invested).
+  const sectorValues: Record<string, number> = {};
+  let nonHedgeInvested = 0;
+  for (const p of positions) {
+    const ticker = p.stock?.ticker;
+    const markPrice = ticker ? (gbpPrices?.[ticker] ?? livePrices?.[ticker] ?? p.entryPrice) : p.entryPrice;
+    const value = markPrice * p.shares;
+    const sleeve = p.stock?.sleeve || 'CORE';
+    if (sleeve !== 'HEDGE') nonHedgeInvested += value;
+    const sector = p.stock?.sector || 'Unknown';
+    sectorValues[sector] = (sectorValues[sector] || 0) + value;
+  }
+  const denominator = Math.max(equity, nonHedgeInvested);
+  if (denominator <= 0) {
     return { id: 'G3', label: 'Sector Concentration', category: 'Allocation', status: 'GREEN', message: 'No portfolio value' };
   }
 
   const caps = getProfileCaps(riskProfile);
-  // Group by actual sector from stock relation
-  const sectorValues: Record<string, number> = {};
-  for (const p of positions) {
-    const sector = p.stock?.sector || 'Unknown';
-    sectorValues[sector] = (sectorValues[sector] || 0) + (p.entryPrice * p.shares);
-  }
 
   // With fewer than 2 distinct sectors, concentration is expected
   if (Object.keys(sectorValues).length < 2) {
@@ -725,7 +754,7 @@ function checkSectorConcentration(positions: HealthCheckPosition[], _equity: num
 
   const breaches: string[] = [];
   for (const [sector, value] of Object.entries(sectorValues)) {
-    const pct = value / totalValue;
+    const pct = value / denominator;
     if (pct > caps.sectorCap) {
       breaches.push(`${sector}: ${(pct * 100).toFixed(0)}% > ${(caps.sectorCap * 100).toFixed(0)}%`);
     }

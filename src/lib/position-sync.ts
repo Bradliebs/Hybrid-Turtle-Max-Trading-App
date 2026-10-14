@@ -38,6 +38,12 @@ export interface PositionSyncResult {
   skipped: number;
   updated: number;
   errors: string[];
+  /** Combined account totalValue (GBP) already fetched during sync, if available. */
+  equityRefreshed?: {
+    combinedTotalValueGbp: number;
+    investTotalValue: number | null;
+    isaTotalValue: number | null;
+  };
 }
 
 export interface PositionSyncOptions {
@@ -209,28 +215,40 @@ export function updateT212PriceCache(prices: Map<string, number>): void {
  * Rehydrate the T212 price cache from disk on server startup.
  * Prevents cold-start staleness — positions immediately show last-known T212 prices.
  */
+let lastRehydrateCheckAt = 0;
+const REHYDRATE_THROTTLE_MS = 30_000;
+
 export async function rehydrateT212PriceCache(): Promise<boolean> {
-  if (t212PriceCache.size > 0) return true; // Already warm
+  const now = Date.now();
+  if (t212PriceCache.size > 0 && now - lastRehydrateCheckAt < REHYDRATE_THROTTLE_MS) {
+    return true;
+  }
+  lastRehydrateCheckAt = now;
   try {
     const persisted = await rehydrateCache<Record<string, T212PriceEntry>>(CACHE_KEYS.T212_PRICES);
     if (persisted && persisted.data) {
       let count = 0;
       for (const [ticker, entry] of Object.entries(persisted.data)) {
         if (entry && typeof entry.price === 'number' && entry.price > 0) {
-          t212PriceCache.set(ticker, entry);
+          const existing = t212PriceCache.get(ticker);
+          if (!existing || (entry.updatedAt ?? 0) >= existing.updatedAt) {
+            t212PriceCache.set(ticker, entry);
+          }
           count++;
         }
       }
       if (count > 0) {
-        t212PriceCacheAge = Math.max(...[...t212PriceCache.values()].map(e => e.updatedAt));
-        console.log(`[position-sync] Rehydrated ${count} T212 prices from disk (age: ${Math.round(persisted.age / 60000)}m)`);
+        const newest = Math.max(...[...t212PriceCache.values()].map(e => e.updatedAt));
+        if (newest > t212PriceCacheAge) {
+          t212PriceCacheAge = newest;
+        }
         return true;
       }
     }
-    return false;
+    return t212PriceCache.size > 0;
   } catch (err) {
     console.warn('[position-sync] Failed to rehydrate T212 price cache:', (err as Error).message);
-    return false;
+    return t212PriceCache.size > 0;
   }
 }
 
@@ -501,15 +519,35 @@ export async function syncClosedPositions(userId: string = 'default-user', optio
 
   // Scheduled syncs verify holdings too, so record when each account was last read
   // successfully (system-status and Settings otherwise only see manual syncs).
+  // Also refresh User.equity from the account summary already fetched by
+  // dualClient.fetchBothAccounts() when every configured account succeeded, so
+  // midday-sync does not immediately hit GET /equity/account/summary a second
+  // time and trip T212's 1-request rate limit.
   try {
     const syncedAt = new Date();
+    const investTotal = !investFailed && typeof dualResult.invest?.summary?.totalValue === 'number'
+      ? dualResult.invest.summary.totalValue : null;
+    const isaTotal = !isaFailed && typeof dualResult.isa?.summary?.totalValue === 'number'
+      ? dualResult.isa.summary.totalValue : null;
+    const allConfiguredSucceeded = (!investCreds || investTotal != null)
+      && (!isaCreds || duplicateAccountKey || isaTotal != null);
+    const combinedTotal = (investTotal ?? 0) + (isaTotal ?? 0);
+    const canWriteEquity = allConfiguredSucceeded && combinedTotal > 0 && (investTotal != null || isaTotal != null);
     await prisma.user.update({
       where: { id: userId },
       data: {
         ...(!investFailed ? { t212LastSync: syncedAt } : {}),
         ...(!isaFailed ? { t212IsaLastSync: syncedAt } : {}),
+        ...(canWriteEquity ? { equity: combinedTotal } : {}),
       },
     });
+    if (canWriteEquity) {
+      result.equityRefreshed = {
+        combinedTotalValueGbp: combinedTotal,
+        investTotalValue: investTotal,
+        isaTotalValue: isaTotal,
+      };
+    }
   } catch (err) {
     result.errors.push(`Could not record sync time: ${(err as Error).message}`);
   }
