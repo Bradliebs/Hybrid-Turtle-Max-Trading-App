@@ -945,7 +945,7 @@ Based on distance to **entry trigger** (adaptive buffer output, not raw 20d high
 |---------|-----------|---------------|---------------|
 | CONSERVATIVE | 0.75% | 8 | 7.0% |
 | BALANCED | 0.95% | 5 | 5.5% |
-| SMALL_ACCOUNT | 2.00% | 4 | 10.0% |
+| SMALL_ACCOUNT | 1.00% | 4 | 10.0% |
 | AGGRESSIVE | 3.00% | 3 | 12.0% |
 
 > **AGGRESSIVE profile also has `initial_stop_atr_mult = 2.0`** — wider initial stops (`entry − 2.0 × ATR` instead of default 1.5). No other profile overrides this.
@@ -1171,4 +1171,4 @@ The advisory prediction engine and its TradePulse/Kelly/RL layers were removed i
 
 ---
 
-*Last verified against source code: 7 March 2026*
+*Last verified against source code: 15 October 2026*

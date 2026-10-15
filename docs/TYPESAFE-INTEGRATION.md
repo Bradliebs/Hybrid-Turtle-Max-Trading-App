@@ -211,6 +211,14 @@ candidates), so the veto has never fired. See the
 On 5 October the owner chose to keep Jev as it is (veto on, no sell authority,
 no extra paid requests) and let the scorecard's tests mature from late October.
 
+### Update 2026-10-14: buyable-only candidate filter
+
+Through 14 October, 14 of Jev's 32 model answers (44%) were spent on stocks with
+no valid Trading 212 ISA ticker. `TypesafeReviewSource.latest()` in
+[typesafe-review-source.ts](../src/lib/typesafe-review-source.ts) now requires
+`stock.t212Ticker IS NOT NULL AND stock.t212Ticker != '' AND stock.isaEligible = 1`
+so every daily request is spent on a stock the ISA can actually buy.
+
 ## Local Configuration
 
 Use Node 20 or newer with a compatible `better-sqlite3` native build, PowerShell 7,

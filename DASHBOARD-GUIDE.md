@@ -82,7 +82,7 @@ The Settings page has 6 sections:
 |---------|-----------|---------------|---------------|
 | Conservative | 0.75% | 8 | 7.0% |
 | **Balanced** (default) | **0.95%** | **5** | **5.5%** |
-| Small Account | 2.00% | 4 | 10.0% |
+| Small Account | 1.00% | 4 | 10.0% |
 | Aggressive | 3.00% | 3 | 12.0% |
 
 > **Note:** The AGGRESSIVE profile also uses a wider initial stop (2.0×ATR vs the default 1.5×ATR).
@@ -636,7 +636,7 @@ Or call the API directly: `POST /api/nightly` with `{"userId": "default-user"}`.
 | A3 | Column Population | Data |
 | C1 | Equity > £0 | Risk |
 | C2 | Open Risk Within Cap | Risk |
-| C3 | Valid Position Sizes | Risk |
+| C3 | Valid Position Sizes (≤ sleeve cap × 1.10 mark-to-market drift tolerance) | Risk |
 | D | Stop Monotonicity | Logic |
 | E | State File Currency | Logic |
 | F | Config Coherence | Logic |

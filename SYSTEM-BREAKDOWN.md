@@ -530,7 +530,7 @@ The weekday execution gates and weekend no-entry blocks are **behavioural guardr
 |---------|-----------|--------------|--------------|
 | CONSERVATIVE | 0.75% | 8 | 7.0% |
 | BALANCED | 0.95% | 5 | 5.5% |
-| **SMALL_ACCOUNT** | **2.00%** | **4** | **10.0%** |
+| **SMALL_ACCOUNT** | **1.00%** | **4** | **10.0%** |
 | AGGRESSIVE | 3.00% | 3 | 12.0% |
 
 **Active profile is SMALL_ACCOUNT.** Max 4 positions.
@@ -947,4 +947,4 @@ src/
 
 ---
 
-*Last updated: 9 March 2026*
+*Last updated: 15 October 2026*

@@ -170,7 +170,7 @@ session argument:
 * `HybridTurtle-Trade-UKM`: `uk-mid --scheduled`
 * `HybridTurtle-Trade-US`: `us --scheduled`
 * `HybridTurtle-Trade-USM`: `us-mid --scheduled`
-* `HybridTurtle-Trade-USC`: `us-close --scheduled`
+* `HybridTurtle-Trade-USC`: `us-close --scheduled` *(scheduled task stays registered, but `auto-trade-task.bat` skips `us-close` by default unless `PAUSE_US_CLOSE=0` is set in `.env`)*
 
 Repair them from an elevated shell with:
 

@@ -115,7 +115,7 @@ Open **Settings** (last item in the top menu).
 |---|---:|---:|---:|---|
 | **Conservative** | 0.75% | 8 | 7% | Cautious beginners, larger accounts |
 | **Balanced** | 0.95% | 5 | 5.5% | Most people — **recommended starting point** |
-| **Small Account** | 2% | 4 | 10% | Small accounts where tiny positions aren't practical |
+| **Small Account** | 1% | 4 | 10% | Small accounts where tiny positions aren't practical |
 | **Aggressive** | 3% | 3 | 12% | Experienced users only |
 
 "Risk per trade" is what **one** losing trade should cost. On Balanced with £10,000, one normal loss is about £95.
@@ -269,7 +269,7 @@ Tick all of these first:
 | 14:45 | US session at the US market open |
 | 17:00 | US midday session |
 | 20:00 | Evening scan only; never buys |
-| 20:30 | US near-close session |
+| 20:30 | US near-close session (paused by default; set `PAUSE_US_CLOSE=0` in `.env` to enable) |
 | Hourly, 08:02–21:02 | Telegram status update |
 
 Each session buys **at most 2** new positions.
