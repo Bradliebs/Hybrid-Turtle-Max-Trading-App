@@ -390,7 +390,8 @@ export async function getDailyPrices(
     recordLiveFetch();
     return bars;
   } catch (error) {
-    console.error(`[YF] Historical failed for ${ticker}:`, (error as Error).message);
+    const msg = ((error as Error).message || 'unknown error').replace(/\s+/g, ' ').slice(0, 160);
+    console.error(`[YF] Historical failed for ${ticker}: ${msg}`);
     // Serve stale cache if available
     const stale = historicalCache.get(cacheKey);
     if (stale) {
@@ -647,17 +648,20 @@ export async function getTechnicalData(ticker: string, forceRefresh = false): Pr
   const twentyDayHigh = calculate20DayHigh(dailyData);
   const priorTwentyDayHigh = getPriorNDayHigh(dailyData, 20);
 
-  // Failed breakout detection: did price cross above the 20d high and then
-  // close back below within 3 candles? If so, record when. dailyData is
-  // newest-first, so we check days 3..7 as potential breakout candles and
-  // look at subsequent bars (lower indices) for the failure close.
+  // Failed breakout detection: did price cross above the PRIOR 20d high on one
+  // of the recent bars (indices 1..5, newest-first) and then close back below
+  // that prior 20d high on a subsequent bar (lower index, including today's
+  // close at index 0)? Previously this compared against `twentyDayHigh`
+  // (`max(high[0..19])`), which includes future bars relative to day `i` and
+  // made the check unreachable whenever price moved higher after the failure.
+  // Walk newest-to-oldest (1..5) so the most recent failed breakout is recorded.
   let failedBreakoutAt: Date | null = null;
-  if (dailyData.length >= 8) {
-    for (let i = 7; i >= 3; i--) {
-      if (dailyData[i].high >= twentyDayHigh) {
-        // Breakout candle found — check next 3 candles for failure
+  if (dailyData.length >= 26) {
+    for (let i = 1; i <= 5; i++) {
+      const prior20HighAtBar = getPriorNDayHigh(dailyData.slice(i), 20);
+      if (prior20HighAtBar > 0 && dailyData[i].high >= prior20HighAtBar) {
         for (let j = i - 1; j >= Math.max(i - 3, 0); j--) {
-          if (dailyData[j].close < twentyDayHigh) {
+          if (dailyData[j].close < prior20HighAtBar) {
             failedBreakoutAt = new Date(dailyData[j].date);
             break;
           }
@@ -1280,16 +1284,20 @@ interface StartupPreCacheEnv {
   NEXT_PHASE?: string;
   HYBRIDTURTLE_SKIP_STARTUP_PRECACHE?: string;
   VITEST?: string;
+  argv1?: string;
 }
 
 export function shouldSkipStartupPreCache(env: StartupPreCacheEnv = {
   NEXT_PHASE: process.env.NEXT_PHASE,
   HYBRIDTURTLE_SKIP_STARTUP_PRECACHE: process.env.HYBRIDTURTLE_SKIP_STARTUP_PRECACHE,
   VITEST: process.env.VITEST,
+  argv1: process.argv[1],
 }): boolean {
+  if (env.HYBRIDTURTLE_SKIP_STARTUP_PRECACHE === 'false') return false;
   return env.NEXT_PHASE === 'phase-production-build'
     || env.HYBRIDTURTLE_SKIP_STARTUP_PRECACHE === 'true'
-    || env.VITEST === 'true';
+    || env.VITEST === 'true'
+    || /(?:^|[\\/])(?:src[\\/]cron|scripts)[\\/]/.test(env.argv1 ?? '');
 }
 
 (function autoPreCache() {

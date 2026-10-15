@@ -75,17 +75,29 @@ function nDayLow(data: { low: number }[], n: number): number {
   return lows.length > 0 ? Math.min(...lows) : 0;
 }
 
-/** Check if the 20-day (or 55-day) high was set in the last 5 bars. */
-function chasingLastN(
+/**
+ * Check if the PRIOR 20-day (or 55-day) high was set in the last `lookback`
+ * bars BEFORE today (indices 1..lookback).
+ *
+ * Starting at index 1 (excluding today's breakout bar, index 0) is essential:
+ * when `data[0]` breaks out above the prior N-day high, `data[0].high` IS the
+ * new N-day high (`nDayHigh(data, N)`), so including `i = 0` caused 100% of
+ * fresh Day-1 breakouts to return `true` and suffer an automatic +5 to +10 FWS
+ * chasing penalty (`fws_extension`). Checking `data.slice(1)` detects genuine
+ * multi-day chasing (where the prior N-day high was already reached in the
+ * preceding `lookback` sessions).
+ */
+export function chasingLastN(
   data: { high: number }[],
   breakoutPeriod: number,
   lookback: number = 5
 ): boolean {
-  if (data.length < breakoutPeriod) return false;
-  const periodHigh = nDayHigh(data, breakoutPeriod);
-  // Check if any of the last `lookback` bars touched the high
-  for (let i = 0; i < Math.min(lookback, data.length); i++) {
-    if (data[i].high >= periodHigh * 0.999) return true;
+  if (data.length < breakoutPeriod + 1) return false;
+  const priorWindow = data.slice(1, breakoutPeriod + 1);
+  const priorPeriodHigh = nDayHigh(priorWindow, breakoutPeriod);
+  if (priorPeriodHigh <= 0) return false;
+  for (let i = 0; i < Math.min(lookback, priorWindow.length); i++) {
+    if (priorWindow[i].high >= priorPeriodHigh * 0.999) return true;
   }
   return false;
 }
@@ -104,10 +116,15 @@ function dollarVol20(data: { close: number; volume: number }[]): number {
   return total / slice.length;
 }
 
-/** Volume ratio — today vs 20-day average */
-function volumeRatio(data: { volume: number }[]): number {
+/**
+ * Volume ratio — today (`data[0]`) vs prior 20-day average (`data.slice(1, 21)`),
+ * matching `getTechnicalData` in `market-data.ts` so a breakout day's volume
+ * surge is not diluted in its own denominator.
+ */
+export function volumeRatio(data: { volume: number }[]): number {
   if (data.length < 2) return 1;
-  const avg20 = data.slice(0, 20).reduce((s, d) => s + d.volume, 0) / Math.min(data.length, 20);
+  const prior = data.slice(1, 21);
+  const avg20 = prior.reduce((s, d) => s + d.volume, 0) / prior.length;
   return avg20 > 0 ? data[0].volume / avg20 : 1;
 }
 

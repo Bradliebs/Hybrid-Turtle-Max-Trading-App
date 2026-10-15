@@ -31,10 +31,14 @@ function makeBars(count: number, base = 100, step = 1) {
 }
 
 describe('shouldSkipStartupPreCache', () => {
-  it('skips startup pre-cache during production build and scheduler jobs', () => {
+  it('skips startup pre-cache during production build and standalone CLI cron/script runs', () => {
     expect(shouldSkipStartupPreCache({ NEXT_PHASE: 'phase-production-build' })).toBe(true);
     expect(shouldSkipStartupPreCache({ HYBRIDTURTLE_SKIP_STARTUP_PRECACHE: 'true' })).toBe(true);
     expect(shouldSkipStartupPreCache({ VITEST: 'true' })).toBe(true);
+    expect(shouldSkipStartupPreCache({ argv1: 'H:\\Hybrid-Turtle-Max\\src\\cron\\auto-trade.ts' })).toBe(true);
+    expect(shouldSkipStartupPreCache({ argv1: 'src/cron/hourly-status.ts' })).toBe(true);
+    expect(shouldSkipStartupPreCache({ argv1: 'scripts/system-check.ts' })).toBe(true);
+    expect(shouldSkipStartupPreCache({ argv1: 'node_modules/next/dist/bin/next' })).toBe(false);
     expect(shouldSkipStartupPreCache({ HYBRIDTURTLE_SKIP_STARTUP_PRECACHE: 'false' })).toBe(false);
   });
 });

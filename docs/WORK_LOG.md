@@ -1667,3 +1667,41 @@ Answer: no, not for buy or sell decisions.
   `SMALL_ACCOUNT` `riskPerTrade` from `2.0%` to `1.0%` to align with the 20%
   `CORE` notional cap and equalise pound risk across 5%–10%+ stop distances.
 - Logged in `docs/SACRED_FILE_CHANGES.md`.
+
+## 2026-10-15 Algorithm audit: look-ahead and self-inclusion fixes (review with Claude Sonnet 5.5)
+
+- **Overnight live verification:**
+  - `PLTR` closed at a profit on 14 Oct 19:18 UTC via its ratcheted trailing
+    stop (`$200.05` fill vs `$190.61` entry = **+0.83R / +£2.45**).
+  - `V` (entered 13 Oct @ `$393.42`, trigger `$392.84`) closed below its trigger
+    and was flagged by the nightly breakout-failure detector; scheduled for
+    automatic `FAILX` exit at the 14:45 UK (`us` open) session today.
+- **Fixed (`A1` — `chasingLastN` tautology in `src/lib/snapshot-sync.ts`):**
+  `chasingLastN(data, 20, 5)` included today's bar (`data[0]`) in both the
+  20-day high and the 5-day check (`i = 0..4`), causing **26 of 26 (100%)**
+  triggered breakouts in last night's `Snapshot` to be flagged `chasing20Last5 =
+  1` and suffer an automatic +5 to +10 FWS extension penalty. It now inspects
+  `data.slice(1, breakoutPeriod + 1)` so fresh Day-1 breakouts are not
+  penalised as "chasing".
+- **Fixed (`A2` — self-diluted `volumeRatio` in `src/lib/snapshot-sync.ts`):**
+  `volumeRatio` averaged over `data.slice(0, 20)` (including today's surge bar
+  in the denominator), whereas `market-data.ts` used `dailyData.slice(1, 21)`.
+  Aligned `snapshot-sync.ts` to `data.slice(1, 21)`.
+- **Fixed (`A3` — look-ahead bias in `failedBreakoutAt` in
+  `src/lib/market-data.ts`):** `getTechnicalData` checked `dailyData[i].high >=
+  twentyDayHigh` (`i = 7..3`), where `twentyDayHigh` (`max(high[0..19])`)
+  included future bars relative to day `i` and missed days `1..2`. It now walks
+  `i = 1..5` newest-to-oldest against the causal rolling prior-20-day high at
+  bar `i` (`getPriorNDayHigh(dailyData.slice(i), 20)`).
+- **Fixed (`A4` — 3.5-minute CLI hang from startup pre-cache in
+  `src/lib/market-data.ts`):** In this morning's `08:20` `uk` auto-trade run,
+  Gate 3a (`CAPITAL_PRESERVATION`) exited in 7ms, but importing `market-data.ts`
+  armed the 3s `autoPreCache()` timer, keeping the process alive for 205.6s to
+  fetch 926 tickers. `shouldSkipStartupPreCache` now automatically skips when
+  `process.argv[1]` is under `src/cron/` or `scripts/`. Also truncated raw HTML
+  Yahoo error dumps in `getDailyPrices` to 160 chars.
+- **Fixed (`A5` — mark-to-market drift tolerance in `checkPositionSizes` `C3`
+  in `src/lib/health-check.ts`):** Added `POSITION_SIZE_DRIFT_TOLERANCE = 1.10`
+  (10% relative drift above the entry cap, i.e. 22% on a 20% cap) so a +1%
+  mark-to-market gain (`VEEV` at 20.47% of equity) does not flip `HealthCheck`
+  to `YELLOW`.

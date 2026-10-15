@@ -511,6 +511,8 @@ function checkOpenRiskCap(
   return { id: 'C2', label: 'Open Risk Within Cap', category: 'Risk', status: 'GREEN', message: `Open risk: ${riskPercent.toFixed(1)}% / ${profile.maxOpenRisk}%` };
 }
 
+export const POSITION_SIZE_DRIFT_TOLERANCE = 1.10; // 10% relative mark-to-market drift above entry cap
+
 export function checkPositionSizes(
   positions: HealthCheckPosition[],
   equity: number,
@@ -544,7 +546,10 @@ export function checkPositionSizes(
     const pct = denominator > 0 ? posValue / denominator : 0;
     const sleeve = p.stock?.sleeve || 'CORE';
     const cap = caps.positionSizeCaps[sleeve] ?? 0.16;
-    return pct > cap;
+    // Allow POSITION_SIZE_DRIFT_TOLERANCE (10% relative mark-to-market drift above entry cap,
+    // e.g. 22% on a 20% cap) so normal unrealized gains or minor FX/equity shifts do not
+    // trigger a false YELLOW on a position that was sized at the cap at entry.
+    return pct > cap * POSITION_SIZE_DRIFT_TOLERANCE;
   });
 
   if (oversized.length > 0) {
